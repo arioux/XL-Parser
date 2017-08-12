@@ -1,12 +1,13 @@
 #!/usr/bin/perl
 # Perl - v: 5.16.3
 #------------------------------------------------------------------------------#
-# XL-ParserAnalysis.pl : Analysis functions for XL-Parser
-# Website              : http://le-tools.com/
-# GitHub		           : https://github.com/arioux/XL-Parser
-# Creation             : 2016-07-15
-# Modified             : 2017-06-30
-# Author               : Alain Rioux (admin@le-tools.com)
+# XL-ParserAnalysis.pl	: Analysis functions for XL-Parser
+# Website     					: http://le-tools.com/XL-Parser.html
+# SourceForge						: https://sourceforge.net/p/xl-parser
+# GitHub								: https://github.com/arioux/XL-Parser
+# Creation							: 2016-07-15
+# Modified							: 2017-08-12
+# Author								: Alain Rioux (admin@le-tools.com)
 #
 # Copyright (C) 2016-2017 Alain Rioux (le-tools.com)
 #
@@ -600,6 +601,7 @@ sub queryLADB
   Win32::Process::Create(my $processObj, $PROGDIR .'\XL-Parser-process.exe', $command, 0, NORMAL_PRIORITY_CLASS, $PROGDIR);
   $$refWin->Enable();
   $$refWin->BringWindowToTop();
+	$$refWin->tfLAQuery->BringWindowToTop();
   
 }  #--- End queryLADB
 
@@ -711,6 +713,7 @@ sub searchSA_LADB
   Win32::Process::Create(my $processObj, $PROGDIR .'\XL-Parser-process.exe', $command, 0, NORMAL_PRIORITY_CLASS, $PROGDIR);
   $$refWin->Enable();
   $$refWin->BringWindowToTop();
+  $$refWin->gridLASearchSAInd->BringWindowToTop();
   
 }  #--- End searchSA_LADB
 
@@ -1657,8 +1660,8 @@ sub loadSAIndGrid
   $$refWin->gridLASearchSAInd->SetCellText(    0, 4, $$refSTR{'Options'});
   $$refWin->gridLASearchSAInd->SetCellCheck(   0, 0, 1);
   # Insert indicators in grid
-  $$refWin->gridLASearchSAInd->SetRows(14);
-  my $refIndicators = &loadSAInd($jsonFile, $refSTR);
+  $$refWin->gridLASearchSAInd->SetRows(15);
+  my $refIndicators = &loadSAInd($jsonFile, $refWin, $refSTR);
   foreach my $index (sort { $a <=> $b } keys %{$refIndicators}) {
     $$refWin->gridLASearchSAInd->SetCellType(    $index, 0, 4);
     $$refWin->gridLASearchSAInd->SetCellText(    $index, 1, $$refIndicators{$index}{name});
@@ -1679,7 +1682,7 @@ sub loadSAInd
 #--------------------------#
 {
   # Local variables
-  my ($jsonFile, $refSTR) = @_;
+  my ($jsonFile, $refWin, $refSTR) = @_;
   my %indicators;
   my $refIndicators = \%indicators;
   # If file already exists, load values
@@ -1688,71 +1691,77 @@ sub loadSAInd
     close($json);
     my $jsonObj = JSON->new;
     $refIndicators = $jsonObj->decode($jsonText);
+		$$refWin->btnLASearchReset->Enable();
   # File don't exist, set default values
   } else {
     # High number of request
     $$refIndicators{1}{name}     = $$refSTR{'SDSAI1'};
     $$refIndicators{1}{score}    = 4;
     $$refIndicators{1}{limit}    = 10;
-    # Request length
-    $$refIndicators{2}{name}     = $$refSTR{'SDSAI2'};
+    # Request length (nbr)
+    $$refIndicators{2}{name}     = $$refSTR{'SDSAI2a'};
     $$refIndicators{2}{score}    = 4;
     $$refIndicators{2}{limit}    = 10;
     $$refIndicators{2}{options}  = 50;
-    # URI encoding
-    $$refIndicators{3}{name}     = $$refSTR{'SDSAI3'};
-    $$refIndicators{3}{score}    = 5;
+    # Request length (max)
+    $$refIndicators{3}{name}     = $$refSTR{'SDSAI2b'};
+    $$refIndicators{3}{score}    = 4;
     $$refIndicators{3}{limit}    = 10;
-    $$refIndicators{3}{options}  = '%';
-    # HTTP Method
-    $$refIndicators{4}{name}     = $$refSTR{'SDSAI4'};
-    $$refIndicators{4}{score}    = 3;
+    $$refIndicators{3}{options}  = 50;
+    # URI encoding
+    $$refIndicators{4}{name}     = $$refSTR{'SDSAI3'};
+    $$refIndicators{4}{score}    = 5;
     $$refIndicators{4}{limit}    = 10;
-    $$refIndicators{4}{options}  = 'POST|HEAD|TRACE|OPTIONS|CONNECT';
-    # High number of errors
-    $$refIndicators{5}{name}     = $$refSTR{'SDSAI5'};
-    $$refIndicators{5}{score}    = 4;
+    $$refIndicators{4}{options}  = '%';
+    # HTTP Method
+    $$refIndicators{5}{name}     = $$refSTR{'SDSAI4'};
+    $$refIndicators{5}{score}    = 3;
     $$refIndicators{5}{limit}    = 10;
-    $$refIndicators{5}{options}  = '40|50';
-    # SQL Query
-    $$refIndicators{6}{name}     = $$refSTR{'SDSAI6'};
-    $$refIndicators{6}{score}    = 7;
+    $$refIndicators{5}{options}  = 'POST|HEAD|TRACE|OPTIONS|CONNECT';
+    # High number of errors
+    $$refIndicators{6}{name}     = $$refSTR{'SDSAI5'};
+    $$refIndicators{6}{score}    = 4;
     $$refIndicators{6}{limit}    = 10;
-    $$refIndicators{6}{options}  = '[^\w]union[^\w]|[^\w]select[^\w]';
-    # Use of quotes (or double-quotes)
-    $$refIndicators{7}{name}     = $$refSTR{'SDSAI7'};
-    $$refIndicators{7}{score}    = 6;
+    $$refIndicators{6}{options}  = '40|50';
+    # SQL Query
+    $$refIndicators{7}{name}     = $$refSTR{'SDSAI6'};
+    $$refIndicators{7}{score}    = 7;
     $$refIndicators{7}{limit}    = 10;
-    $$refIndicators{7}{options}  = "'|\"|%27|%22";
-    # Directory traversal
-    $$refIndicators{8}{name}     = $$refSTR{'SDSAI8'};
-    $$refIndicators{8}{score}    = 8;
+    $$refIndicators{7}{options}  = '[^\w]union[^\w]|[^\w]select[^\w]';
+    # Use of quotes (or double-quotes)
+    $$refIndicators{8}{name}     = $$refSTR{'SDSAI7'};
+    $$refIndicators{8}{score}    = 6;
     $$refIndicators{8}{limit}    = 10;
-    $$refIndicators{8}{options}  = '\\.\\./|\\.\\.%2[Ff]';
-    # Remote file inclusion
-    $$refIndicators{9}{name}     = $$refSTR{'SDSAI9'};
+    $$refIndicators{8}{options}  = "'|\"|%27|%22";
+    # Directory traversal
+    $$refIndicators{9}{name}     = $$refSTR{'SDSAI8'};
     $$refIndicators{9}{score}    = 8;
     $$refIndicators{9}{limit}    = 10;
-    $$refIndicators{9}{options}  = 'http[:%]';
-    # Admin or login scan
-    $$refIndicators{10}{name}    = $$refSTR{'SDSAI10'};
-    $$refIndicators{10}{score}   = 6;
+    $$refIndicators{9}{options}  = '\\.\\./|\\.\\.%2[Ff]';
+    # Remote file inclusion
+    $$refIndicators{10}{name}    = $$refSTR{'SDSAI9'};
+    $$refIndicators{10}{score}   = 8;
     $$refIndicators{10}{limit}   = 10;
-    $$refIndicators{10}{options} = 'admin|login';
-    # Web scanner
-    $$refIndicators{11}{name}    = $$refSTR{'SDSAI11'};
-    $$refIndicators{11}{score}   = 10;
+    $$refIndicators{10}{options} = 'http[:%]';
+    # Admin or login scan
+    $$refIndicators{11}{name}    = $$refSTR{'SDSAI10'};
+    $$refIndicators{11}{score}   = 6;
     $$refIndicators{11}{limit}   = 10;
-    $$refIndicators{11}{options} = 'havij|sqlmap|nikto|webcruiser|zap|acunetix|dirbuster|zap|WCRTEXTAREATESTINPUT|r3dm0v3|ApacheBench';
-    # No useragent
-    $$refIndicators{12}{name}    = $$refSTR{'SDSAI12'};
-    $$refIndicators{12}{score}   = 5;
+    $$refIndicators{11}{options} = 'admin|login';
+    # Web scanner
+    $$refIndicators{12}{name}    = $$refSTR{'SDSAI11'};
+    $$refIndicators{12}{score}   = 10;
     $$refIndicators{12}{limit}   = 10;
-    $$refIndicators{12}{options} = 3;
-    # Many useragent
-    $$refIndicators{13}{name}    = $$refSTR{'SDSAI13'};
+    $$refIndicators{12}{options} = 'havij|sqlmap|nikto|webcruiser|zap|acunetix|dirbuster|zap|WCRTEXTAREATESTINPUT|r3dm0v3|ApacheBench';
+    # No useragent
+    $$refIndicators{13}{name}    = $$refSTR{'SDSAI12'};
     $$refIndicators{13}{score}   = 5;
     $$refIndicators{13}{limit}   = 10;
+    $$refIndicators{13}{options} = 3;
+    # Many useragent
+    $$refIndicators{14}{name}    = $$refSTR{'SDSAI13'};
+    $$refIndicators{14}{score}   = 5;
+    $$refIndicators{14}{limit}   = 10;
   }
   return($refIndicators);
   

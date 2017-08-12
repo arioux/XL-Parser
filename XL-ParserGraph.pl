@@ -2,7 +2,8 @@
 # Perl - v: 5.16.3
 #------------------------------------------------------------------------------#
 # XL-ParserGraph.pl : Graphic elements for XL-Parser
-# Website           : http://le-tools.com/
+# Website           : http://le-tools.com/XL-Parser.html
+# SourceForge       : https://sourceforge.net/p/xl-parser
 # GitHub            : https://github.com/arioux/XL-Parser
 # Creation          : 2016-07-15
 # Modified          : 2017-06-30

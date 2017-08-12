@@ -2,11 +2,12 @@
 # Perl - v: 5.16.3
 #------------------------------------------------------------------------------#
 # Extract.pl  : XL-Parser process for extraction and log analysis (must be packaged as .exe)
-# Website     : http://le-tools.com/
+# Website     : http://le-tools.com/XL-Parser.html
+# SourceForge : https://sourceforge.net/p/xl-parser
 # GitHub      : https://github.com/arioux/XL-Parser
 # Creation    : 2016-07-15
-# Modified    : 2017-06-30
-my $VERSION   = '1.0';
+# Modified    : 2017-08-12
+my $VERSION   = '1.1';
 # Author      : Alain Rioux (admin@le-tools.com)
 #
 # Copyright (C) 2016-2017 Alain Rioux (le-tools.com)
@@ -624,10 +625,11 @@ sub createWinResults
   $winResults->gridResFiles->SetListMode(1);
   # Popup menu for Result Files grid
   $gridResFilesMenu = new Win32::GUI::Menu(
-    'gridResFilesMenu'                             => 'gridResFilesMenu'  ,
+    'gridResFilesMenu'                             => 'gridResFilesMenu'         ,
     "> $STR{'showResults'}"                        => { -name => 'showResFileResults', -default => 1 },
     "> $STR{'showResults'} ($STR{'NoDuplicates'})" => 'showResFileResultsNoDupl' ,
     "> $STR{'showResults'} ($STR{'ResultsOnly'})"  => 'showResFileResultsResOnly',
+    "> $STR{'showResults'} ($STR{'ResultsOnly'}-$STR{'NoDuplicates'})"  => 'showResFileResultsResOnlyNoDupl',
     "> $STR{'openFile'}"                           => 'openResFile'              ,
     "> $STR{'copyFile'}".'...'                     => 'copyResFile'              ,
     " > -" => 0,
@@ -651,6 +653,7 @@ sub createWinResults
     "> $STR{'showResults'}"                        => { -name => 'showResExprResults', -default => 1 },
     "> $STR{'showResults'} ($STR{'NoDuplicates'})" => 'showResExprResultsNoDupl' ,
     "> $STR{'showResults'} ($STR{'ResultsOnly'})"  => 'showResExprResultsResOnly',
+    "> $STR{'showResults'} ($STR{'ResultsOnly'}-$STR{'NoDuplicates'})"  => 'showResExprResultsResOnlyNoDupl',
     " > -" => 0,
     "> $STR{'selectAll'}"                          => 'selectAllResExpr' ,
     "> $STR{'copySelRow'}"                         => 'copySelResExprRow',
@@ -3990,6 +3993,7 @@ sub extractSOFiles
       };
       # Thread 'die' signal handler
       $SIG{__DIE__} = sub {
+        #return if $_[0] =~ /Invalid version format/;  # Worked for XL-Tools, to test, prevent crash from Parse::HTTP::UserAgent, ex.: Java/1.7.0_09-icedtea
         die if $_[0] =~ /Negative length/ and $_[0] =~ /IO\/Handle.pm/;
         print $_[0] . "\n";
         my $errMsg = (split(/ at /, $_[0]))[0];
@@ -5642,6 +5646,28 @@ sub showResFileResultsResOnly_Click
 }  #--- End showResFileResultsResOnly_Click
 
 #--------------------------#
+sub showResFileResultsResOnlyNoDupl_Click
+#--------------------------#
+{
+  # Get selected row number(s)
+  my (@coord) = $winResults->gridResFiles->GetSelectedCellRange();
+  my $firstSelectedRow;
+  my $lastSelectedRow;
+  if    ($coord[2]) { $firstSelectedRow = $coord[0]; $lastSelectedRow = $coord[2]; }
+  elsif ($coord[0]) { $firstSelectedRow = $coord[0]; $lastSelectedRow = $coord[0]; }
+  else {
+    $firstSelectedRow = $winResults->gridResFiles->GetRows()-1;
+    $lastSelectedRow  = $winResults->gridResFiles->GetRows()-1;
+  }
+  my %selFiles;
+  for (my $row = $lastSelectedRow; $row >= $firstSelectedRow; $row--) {
+    $selFiles{$winResults->gridResFiles->GetCellText($row, 0)} = 1 if $winResults->gridResFiles->IsCellSelected($row, 0);
+  }
+  threads->create(sub { &showTmpFileResultResOnlyNoDupl(\%selFiles); });
+
+}  #--- End showResFileResultsResOnlyNoDupl_Click
+
+#--------------------------#
 sub openResFile_Click
 #--------------------------#
 {
@@ -5905,6 +5931,28 @@ sub showResExprResultsResOnly_Click
 }  #--- End showResExprResultsResOnly_Click
 
 #--------------------------#
+sub showResExprResultsResOnlyNoDupl_Click
+#--------------------------#
+{
+  # Get selected row number(s)
+  my (@coord) = $winResults->gridResExpr->GetSelectedCellRange();
+  my $firstSelectedRow;
+  my $lastSelectedRow;
+  if    ($coord[2]) { $firstSelectedRow = $coord[0]; $lastSelectedRow = $coord[2]; }
+  elsif ($coord[0]) { $firstSelectedRow = $coord[0]; $lastSelectedRow = $coord[0]; }
+  else {
+    $firstSelectedRow = $winResults->gridResExpr->GetRows()-1;
+    $lastSelectedRow  = $winResults->gridResExpr->GetRows()-1;
+  }
+  my %selExpr;
+  for (my $row = $lastSelectedRow; $row >= $firstSelectedRow; $row--) {
+    $selExpr{$winResults->gridResExpr->GetCellText($row, 0)} = 1 if $winResults->gridResExpr->IsCellSelected($row, 0);
+  }
+  threads->create(sub { &showTmpExprResultResOnlyNoDupl(\%selExpr); });
+
+}  #--- End showResExprResultsResOnlyNoDupl_Click
+
+#--------------------------#
 sub selectAllResExpr_Click
 #--------------------------#
 {
@@ -6050,6 +6098,50 @@ sub showTmpExprResultResOnly
 }  #--- End showTmpExprResultResOnly
 
 #--------------------------#
+sub showTmpExprResultResOnlyNoDupl
+#--------------------------#
+{
+  # Local variable
+  my $refSelExpr = shift;
+  my $nbrSelExpr = scalar(keys %{$refSelExpr});
+  my %resByExpr;
+  # Compile results
+  my $tmpReport  = "$REPORTDIR\\.XL-Parser_tmp-"     . $PROCESSID .'.txt';
+  my $tmpResults = "$REPORTDIR\\.XL-Parser_tmp_res-" . $PROCESSID .'.txt';
+  my $totalTmpResults = 0;
+  # Compile results
+  if ($tmpReport and -f $tmpReport and open(my $tmpReportFH, $tmpReport)) {
+    while (<$tmpReportFH>) {
+      if (/^[^\t]+\t([^\t]+)\t([^\t]+)/) {
+        my $object = $1;
+        my $result = $2;
+        chomp($result);
+        if (exists($$refSelExpr{$object})) { # Selected object
+          if (exists($resByExpr{$object}) and exists($resByExpr{$object}{$result})) {
+            $resByExpr{$object}{$result}++;
+          } else { $resByExpr{$object}{$result} = 1; }
+          $totalTmpResults++;
+        }
+      }
+    }
+    close($tmpReportFH);
+    # Print results
+    if ($totalTmpResults) {
+      if (open(my $tmpResFH, ">$tmpResults")) {
+        foreach my $object (keys %resByExpr) {
+          foreach my $result (sort {$resByExpr{$object}{$b} <=> $resByExpr{$object}{$a}} keys %{$resByExpr{$object}}) {
+            print $tmpResFH "$result\n";
+          }
+        }
+        close($tmpResFH);
+      }
+      $winResults->ShellExecute('open', $tmpResults,'','',1);
+    } else { Win32::GUI::MessageBox($winResults, $STR{'noResult'} , "XL-Parser $VERSION", 0x40040); }
+  }
+  
+}  #--- End showTmpExprResultResOnlyNoDupl
+
+#--------------------------#
 sub showTmpSOResult
 #--------------------------#
 {
@@ -6109,6 +6201,40 @@ sub showTmpFileResult
   
 }  #--- End showTmpFileResult
 
+
+#--------------------------#
+sub showTmpFileResultResOnly
+#--------------------------#
+{
+  # Local variable
+	my $refSelFiles = shift;
+  my $nbrSelFiles = scalar(keys %{$refSelFiles});
+  # Compile results
+  my $tmpReport  = "$REPORTDIR\\.XL-Parser_tmp-"     . $PROCESSID .'.txt';
+  my $tmpResults = "$REPORTDIR\\.XL-Parser_tmp_res-" . $PROCESSID .'.txt';
+  my $totalTmpResults = 0;
+  if ($tmpReport and -f $tmpReport and open(my $tmpReportFH, $tmpReport) and open(my $tmpResFH, ">$tmpResults")) {
+    while (<$tmpReportFH>) {
+      if (/^([^\t]+)\t([^\t]+)\t(.+)/ or /^([^\t]+)\t(.+)/) {
+        if (exists($$refSelFiles{$1})) {
+          if ($nbrSelFiles > 1) { print $tmpResFH $_;     }
+          else {
+						if ($3) { print $tmpResFH "$3\n"; }
+						else    { print $tmpResFH "$2\n"; }
+					}
+          $totalTmpResults++;
+        }
+      }
+    }
+    close($tmpReportFH);
+    close($tmpResFH);
+    if ($totalTmpResults) {
+      $winResults->ShellExecute('open', $tmpResults,'','',1);
+    } else { Win32::GUI::MessageBox($winResults, $STR{'noResult'} , "XL-Parser $VERSION", 0x40040); }
+  }
+  
+}  #--- End showTmpFileResultResOnly
+
 #--------------------------#
 sub showTmpFileResultNoDupl
 #--------------------------#
@@ -6158,6 +6284,53 @@ sub showTmpFileResultNoDupl
 }  #--- End showTmpFileResultNoDupl
 
 #--------------------------#
+sub showTmpFileResultResOnlyNoDupl
+#--------------------------#
+{
+  # Local variable
+  my $refSelFiles = shift;
+  my $nbrSelFiles = scalar(keys %{$refSelFiles});
+  my %resByFile;
+  # Compile results
+  my $tmpReport  = "$REPORTDIR\\.XL-Parser_tmp-"     . $PROCESSID .'.txt';
+  my $tmpResults = "$REPORTDIR\\.XL-Parser_tmp_res-" . $PROCESSID .'.txt';
+  my $totalTmpResults = 0;
+  # Compile results
+  if ($tmpReport and -f $tmpReport and open(my $tmpReportFH, $tmpReport)) {
+    while (<$tmpReportFH>) {
+      if (/^([^\t]+)\t([^\t]+)\t([^\t]+)/) {
+        my $file   = $1;
+        my $object = $2;
+        my $result = $3;
+        chomp($result);
+        if (exists($$refSelFiles{$file})) { # Selected file
+          if (exists($resByFile{$file}) and exists($resByFile{$file}{$object}) and exists($resByFile{$file}{$object}{$result})) {
+            $resByFile{$file}{$object}{$result}++;
+          } else { $resByFile{$file}{$object}{$result} = 1; }
+          $totalTmpResults++;
+        }
+      }
+    }
+    close($tmpReportFH);
+    # Print results
+    if ($totalTmpResults) {
+      if (open(my $tmpResFH, ">$tmpResults")) {
+        foreach my $file (keys %resByFile) {
+          foreach my $object (keys %{$resByFile{$file}}) {
+            foreach my $result (sort {$resByFile{$file}{$object}{$b} <=> $resByFile{$file}{$object}{$a}} keys %{$resByFile{$file}{$object}}) {
+              print $tmpResFH "$result\n";
+            }
+          }
+        }
+        close($tmpResFH);
+      }
+      $winResults->ShellExecute('open', $tmpResults,'','',1);
+    } else { Win32::GUI::MessageBox($winResults, $STR{'noResult'} , "XL-Parser $VERSION", 0x40040); }
+  }
+  
+}  #--- End showTmpFileResultResOnlyNoDupl
+
+#--------------------------#
 sub btnSaveResultsExtract_Click
 #--------------------------#
 {
@@ -6165,7 +6338,7 @@ sub btnSaveResultsExtract_Click
                                                 -title     => $STR{'selFile'}.':',
                                                 -filter    => ["JSON files (*.json)", '*.json'],
                                                 -directory => $REPORTDIR,
-                                                -overwriteprompt  => 1,
+                                                -overwriteprompt => 1,
                                                 -explorer  => 1)) {
     $THR = threads->create(sub {
       # Thread 'die' signal handler
@@ -7529,39 +7702,6 @@ sub writeReportSOTXT
 }  #--- End writeReportSOTXT
 
 #--------------------------#
-sub showTmpFileResultResOnly
-#--------------------------#
-{
-  # Local variable
-	my $refSelFiles = shift;
-  my $nbrSelFiles = scalar(keys %{$refSelFiles});
-  # Compile results
-  my $tmpReport  = "$REPORTDIR\\.XL-Parser_tmp-"     . $PROCESSID .'.txt';
-  my $tmpResults = "$REPORTDIR\\.XL-Parser_tmp_res-" . $PROCESSID .'.txt';
-  my $totalTmpResults = 0;
-  if ($tmpReport and -f $tmpReport and open(my $tmpReportFH, $tmpReport) and open(my $tmpResFH, ">$tmpResults")) {
-    while (<$tmpReportFH>) {
-      if (/^([^\t]+)\t([^\t]+)\t(.+)/ or /^([^\t]+)\t(.+)/) {
-        if (exists($$refSelFiles{$1})) {
-          if ($nbrSelFiles > 1) { print $tmpResFH $_;     }
-          else {
-						if ($3) { print $tmpResFH "$3\n"; }
-						else    { print $tmpResFH "$2\n"; }
-					}
-          $totalTmpResults++;
-        }
-      }
-    }
-    close($tmpReportFH);
-    close($tmpResFH);
-    if ($totalTmpResults) {
-      $winResults->ShellExecute('open', $tmpResults,'','',1);
-    } else { Win32::GUI::MessageBox($winResults, $STR{'noResult'} , "XL-Parser $VERSION", 0x40040); }
-  }
-  
-}  #--- End showTmpFileResultResOnly
-
-#--------------------------#
 sub ExtractResults
 #--------------------------#
 {
@@ -8217,18 +8357,21 @@ sub searchDB
             $results{ByIPs}{$$refEntryFields[0]}{$STR{'SDSAI1'}} = $$refEntryFields[1];
             $index++;
           }
-        # Request length
-        } elsif ($indicator eq $STR{'SDSAI2'}) {
+        # Request length (nbr)
+        } elsif ($indicator eq $STR{'SDSAI2a'}) {
           my $minLength = $$refSearchParams{selIndicators}{$indicator}{option};
-          $minLength = 50 if !$minLength;
+          $minLength    = 50 if !$minLength;
+          my $avgLengthRequest = $dbh->selectrow_array('SELECT round(avg(length)) FROM (SELECT length(http_request) ' .
+                                                       'AS length FROM LOG GROUP BY length HAVING length > '.$minLength.')');
+          my $avgLengthParams = $dbh->selectrow_array('SELECT round(avg(length)) FROM (SELECT length(http_params) ' .
+                                                      'AS length FROM LOG GROUP BY length HAVING length > '.$minLength.')');
+          $avgLengthRequest = $minLength if !$avgLengthRequest;
+          $avgLengthParams  = $minLength if !$avgLengthParams;
           my $SQLQuery;
-          # By IP address
-          $SQLQuery = 'SELECT remoteIP,sum(length) AS sum FROM (SELECT remoteIP,length(http_request) AS length FROM LOG GROUP BY ' .
-                      'remoteIP,length HAVING length > (SELECT round(avg(length)) FROM (SELECT remoteIP,length(http_request) AS ' .
-                      'length FROM LOG GROUP BY length HAVING length > ' . $minLength . ')) UNION SELECT remoteIP,length(http_params) ' .
-                      'AS length FROM LOG GROUP BY remoteIP,length HAVING length > (SELECT round(avg(length)) FROM ' .
-                      '(SELECT remoteIP,length(http_params) AS length FROM LOG GROUP BY length HAVING length > ' . $minLength .
-                      '))) GROUP BY remoteIP ORDER BY sum DESC LIMIT ' . $$refSearchParams{selIndicators}{$indicator}{limit};
+          $SQLQuery = 'SELECT remoteIP,COUNT(remoteIP) AS number FROM (SELECT id,remoteIP,length(http_request) AS length ' .
+                      'FROM LOG GROUP BY remoteIP,length HAVING length > ' . $avgLengthRequest . ' UNION SELECT id,remoteIP,length(http_params) ' .
+                      'AS length FROM LOG GROUP BY remoteIP,length HAVING length > ' . $avgLengthParams . ') GROUP BY remoteIP ' .
+                      'ORDER BY number DESC LIMIT ' . $$refSearchParams{selIndicators}{$indicator}{limit};
           $sth = $dbh->prepare($SQLQuery);
           $sth->execute();
           my $index = 0;
@@ -8238,7 +8381,7 @@ sub searchDB
               ($$refSearchParams{selIndicators}{$indicator}{limit} - $index);
             } else { $results{ByIPs}{$$refEntryFields[0]}{score} = $$refSearchParams{selIndicators}{$indicator}{score} *
                     ($$refSearchParams{selIndicators}{$indicator}{limit} - $index); }
-            $results{ByIPs}{$$refEntryFields[0]}{$STR{'SDSAI2'}} = $$refEntryFields[1];
+            $results{ByIPs}{$$refEntryFields[0]}{$STR{'SDSAI2a'}} = $$refEntryFields[1];
             $index++;
           }
           # Activities only
@@ -8247,13 +8390,40 @@ sub searchDB
                       'length FROM LOG GROUP BY remoteIP,length HAVING length > ' . $minLength . ')';
           $sth = $dbh->prepare($SQLQuery);
           $sth->execute();
-          $results{ACTs}{$STR{'SDSAI2'}} = ($sth->fetchrow_array())[0];
+          $results{ACTs}{$STR{'SDSAI2a'}} = ($sth->fetchrow_array())[0];
+        # Request length (max)
+        } elsif ($indicator eq $STR{'SDSAI2b'}) {
+          my $minLength = $$refSearchParams{selIndicators}{$indicator}{option};
+          $minLength = 50 if !$minLength;
+          my $SQLQuery;
+          $SQLQuery = 'SELECT remoteIP,length FROM (SELECT remoteIP,length(http_request) AS length FROM LOG GROUP BY remoteIP,length ' .
+                      'HAVING length > ' . $minLength . ' UNION SELECT remoteIP,length(http_params) AS length FROM LOG ' .
+                      'GROUP BY remoteIP,length HAVING length > ' . $minLength . ') GROUP BY remoteIP ORDER BY length ' .
+                      'DESC LIMIT ' . $$refSearchParams{selIndicators}{$indicator}{limit};
+          $sth = $dbh->prepare($SQLQuery);
+          $sth->execute();
+          my $index = 0;
+          while (my $refEntryFields = $sth->fetchrow_arrayref()) {
+            if (exists($results{ByIPs}{$$refEntryFields[0]}) and exists($results{ByIPs}{$$refEntryFields[0]}{score})) {
+              $results{ByIPs}{$$refEntryFields[0]}{score} += $$refSearchParams{selIndicators}{$indicator}{score} *
+              ($$refSearchParams{selIndicators}{$indicator}{limit} - $index);
+            } else { $results{ByIPs}{$$refEntryFields[0]}{score} = $$refSearchParams{selIndicators}{$indicator}{score} *
+                    ($$refSearchParams{selIndicators}{$indicator}{limit} - $index); }
+            $results{ByIPs}{$$refEntryFields[0]}{$STR{'SDSAI2b'}} = $$refEntryFields[1];
+            $index++;
+          }
+          # Activities only
+          $SQLQuery = 'SELECT COUNT(remoteIP) FROM (SELECT remoteIP,http_request,length(http_request) AS length FROM LOG GROUP BY ' .
+                      'remoteIP,length HAVING length > ' . $minLength . ' UNION SELECT remoteIP,http_params,length(http_params) AS ' .
+                      'length FROM LOG GROUP BY remoteIP,length HAVING length > ' . $minLength . ')';
+          $sth = $dbh->prepare($SQLQuery);
+          $sth->execute();
+          $results{ACTs}{$STR{'SDSAI2b'}} = ($sth->fetchrow_array())[0];
         # URI Encoding
         } elsif ($indicator eq $STR{'SDSAI3'}) {
           my $charList = $$refSearchParams{selIndicators}{$indicator}{option};
           $charList = '%' if !$charList;
           my $SQLQuery;
-          # By IP address
           $SQLQuery = 'SELECT remoteIP,count(remoteIP) AS Number FROM LOG WHERE http_request REGEXP ' . "'" . $charList . "'" . 'OR ' .
                       'http_params REGEXP ' . "'" . $charList . "'" . ' GROUP BY remoteIP ORDER BY Number DESC LIMIT ' .
                       $$refSearchParams{selIndicators}{$indicator}{limit};
@@ -8280,7 +8450,6 @@ sub searchDB
           my $method = $$refSearchParams{selIndicators}{$indicator}{option};
           $method = 'POST|HEAD|TRACE|OPTIONS|CONNECT' if !$method;
           my $SQLQuery;
-          # By IP address
           $SQLQuery = 'SELECT remoteIP,count(http_method) AS NumberOf FROM (SELECT remoteIP,http_method FROM LOG WHERE http_method REGEXP ' . "'" .
                       $method . "'" . ') GROUP BY remoteIP ORDER BY NumberOf DESC LIMIT ' . $$refSearchParams{selIndicators}{$indicator}{limit};
           $sth = $dbh->prepare($SQLQuery);
@@ -8333,7 +8502,6 @@ sub searchDB
           my $keywords = $$refSearchParams{selIndicators}{$indicator}{option};
           $keywords = '[^\w]union[^\w]|[^\w]select[^\w]' if !$keywords;
           my $SQLQuery;
-          # By IP address
           $SQLQuery = 'SELECT remoteIP,count(remoteIP) AS Number FROM LOG WHERE http_request REGEXP ' . "'" . $keywords . "'" .
                       'OR http_params REGEXP ' . "'" . $keywords . "'" . ' GROUP BY remoteIP ORDER BY Number DESC LIMIT ' .
                       $$refSearchParams{selIndicators}{$indicator}{limit};
@@ -8361,7 +8529,6 @@ sub searchDB
           $keywords = "'|\"|%27|%22" if !$keywords;
           $keywords =~ s/'/''/g;
           my $SQLQuery;
-          # By IP address
           $SQLQuery = 'SELECT remoteIP,count(remoteIP) AS Number FROM LOG WHERE http_request REGEXP ' . "'" . $keywords . "'" .
                       'OR http_params REGEXP ' . "'" . $keywords . "'" . ' GROUP BY remoteIP ORDER BY Number DESC LIMIT ' .
                       $$refSearchParams{selIndicators}{$indicator}{limit};
@@ -8388,7 +8555,6 @@ sub searchDB
           my $keywords = $$refSearchParams{selIndicators}{$indicator}{option};
           $keywords = '\\.\\./|\\.\\.%2[Ff]' if !$keywords;
           my $SQLQuery;
-          # By IP address
           $SQLQuery = 'SELECT remoteIP,count(remoteIP) AS Number FROM LOG WHERE http_request REGEXP ' . "'" . $keywords . "'" .
                       'OR http_params REGEXP ' . "'" . $keywords . "'" . ' GROUP BY remoteIP ORDER BY Number DESC LIMIT ' .
                       $$refSearchParams{selIndicators}{$indicator}{limit};
@@ -8415,7 +8581,6 @@ sub searchDB
           my $keywords = $$refSearchParams{selIndicators}{$indicator}{option};
           $keywords = 'http[:%]' if !$keywords;
           my $SQLQuery;
-          # By IP address
           $SQLQuery = 'SELECT remoteIP,count(remoteIP) AS Number FROM LOG WHERE http_request REGEXP ' . "'" . $keywords . "'" .
                       'OR http_params REGEXP ' . "'" . $keywords . "'" . ' GROUP BY remoteIP ORDER BY Number DESC LIMIT ' .
                       $$refSearchParams{selIndicators}{$indicator}{limit};
@@ -8442,7 +8607,6 @@ sub searchDB
           my $keywords = $$refSearchParams{selIndicators}{$indicator}{option};
           $keywords = 'admin|login' if !$keywords;
           my $SQLQuery;
-          # By IP address
           $SQLQuery = 'SELECT remoteIP,count(remoteIP) AS Number FROM LOG WHERE http_request REGEXP ' . "'" . $keywords . "'" .
                       'OR http_params REGEXP ' . "'" . $keywords . "'" . ' GROUP BY remoteIP ORDER BY Number DESC LIMIT ' .
                       $$refSearchParams{selIndicators}{$indicator}{limit};
@@ -8469,7 +8633,6 @@ sub searchDB
           my $keywords = $$refSearchParams{selIndicators}{$indicator}{option};
           $keywords = 'havij|sqlmap|nikto|webcruiser|zap|acunetix|dirbuster|zap|WCRTEXTAREATESTINPUT|r3dm0v3|ApacheBench' if !$keywords;
           my $SQLQuery;
-          # By IP address
           $SQLQuery = 'SELECT remoteIP,count(remoteIP) AS Number FROM (SELECT remoteIP FROM LOG WHERE useragent REGEXP ' . "'" .
                       $keywords . "'" . ' OR http_request REGEXP ' . "'" . $keywords . "'" . ' OR http_params REGEXP ' . "'" .
                       $keywords . "'" . ') GROUP BY remoteIP ORDER BY Number DESC LIMIT ' . $$refSearchParams{selIndicators}{$indicator}{limit};
@@ -8502,7 +8665,6 @@ sub searchDB
           my $nbrRes = ($sth->fetchrow_array())[0];
           if ($nbrRes != $nbrEntries) { # There are useragent in database
             $results{ACTs}{$STR{'SDSAI12'}} = $nbrRes;
-            # By IP address
             $SQLQuery = 'SELECT remoteIP,COUNT(remoteIP) AS Nbr FROM LOG WHERE useragent IS NULL OR length(useragent) < ' .
                         $length . ' GROUP BY remoteIP ORDER BY Nbr DESC LIMIT ' . $$refSearchParams{selIndicators}{$indicator}{limit};
             $sth = $dbh->prepare($SQLQuery);
@@ -8524,7 +8686,6 @@ sub searchDB
           $sth = $dbh->prepare($SQLQuery);
           $sth->execute();
           if (($sth->fetchrow_array())[0] > 0) { # There are useragent in database
-            # By IP address
             $SQLQuery = 'SELECT remoteIP,COUNT(DISTINCT useragent) AS Nbr FROM LOG WHERE useragent IS NOT NULL GROUP BY remoteIP ' .
                         'HAVING Nbr > 1 ORDER BY Nbr DESC LIMIT ' . $$refSearchParams{selIndicators}{$indicator}{limit};
             $sth = $dbh->prepare($SQLQuery);
@@ -8597,7 +8758,7 @@ sub searchDB
       # Suspicious activities grid header (Activities only)
       $winSearchSA->gridResultsSA_ACTs->SetCellText(0, 0, $STR{'Indicator'} );
       $winSearchSA->gridResultsSA_ACTs->SetCellText(0, 1, $STR{'ResStatsEntries'});
-      $winSearchSA->gridResultsSA_ACTs->SetCellText(1, 0, $STR{'SDSAI2'} );
+      $winSearchSA->gridResultsSA_ACTs->SetCellText(1, 0, $STR{'SDSAI2b'} );
       $i = 1;
       foreach my $indicator (sort { $results{ACTs}{$b} <=> $results{ACTs}{$a} } keys %{$results{ACTs}}) {
         $winSearchSA->gridResultsSA_ACTs->SetCellText($i, 0, $indicator);
@@ -8614,7 +8775,7 @@ sub searchDB
       $dbh->disconnect();
       $winPb->ChangeCursor($ARROW);
       # Saved Results to JSON files
-      $results{REPORTDIR} = $REPORTDIR;
+      $results{reportDir} = $$refSearchParams{reportDir};
       if (open(my $json, '>:encoding(cp1252)', "$REPORTDIR\\CurrentSearchResults-" . $PROCESSID .'.json')) {
         my $jsonObj = JSON->new;
         my $jsonText = $jsonObj->encode(\%results);
@@ -9195,7 +9356,7 @@ sub SA_GetReqInd_Click
     $$refSearchParams{replReport} = 0 if scalar(@listIndicators) > 1;
     foreach my $indicator (@listIndicators) {
       my $SQLQuery = $SQLQuerySelect;
-      if      ($indicator eq $STR{'SDSAI2'}) { # Request length
+      if      ($indicator eq $STR{'SDSAI2b'}) { # Request length
         my $minLength = $$refSearchParams{selIndicators}{$indicator}{option};
         $SQLQuery .= 'FROM (SELECT *,length(http_request) AS length FROM LOG GROUP BY remoteIP,length HAVING length > ' .
                       $minLength . ' UNION SELECT *,length(http_params) AS length FROM LOG GROUP BY remoteIP,length HAVING length > ' .
@@ -9344,7 +9505,7 @@ sub SAResults
       # Suspicious activities grid header (Activities only)
       $winSearchSA->gridResultsSA_ACTs->SetCellText(0, 0, $STR{'Indicator'} );
       $winSearchSA->gridResultsSA_ACTs->SetCellText(0, 1, $STR{'ResStatsEntries'});
-      $winSearchSA->gridResultsSA_ACTs->SetCellText(1, 0, $STR{'SDSAI2'} );
+      $winSearchSA->gridResultsSA_ACTs->SetCellText(1, 0, $STR{'SDSAI2b'} );
       $i = 1;
       foreach my $indicator (sort { $$refResults{ACTs}{$b} <=> $$refResults{ACTs}{$a} } keys %{$$refResults{ACTs}}) {
         $winSearchSA->gridResultsSA_ACTs->SetCellText($i, 0, $indicator);

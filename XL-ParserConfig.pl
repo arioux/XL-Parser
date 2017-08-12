@@ -1,12 +1,13 @@
 #!/usr/bin/perl
 # Perl - v: 5.16.3
 #------------------------------------------------------------------------------#
-# XL-ParserConfig.pl : Configuration functions for XL-Parser
-# Website            : http://le-tools.com/
-# GitHub		         : https://github.com/arioux/XL-Parser
-# Creation           : 2016-07-15
-# Modified           : 2017-06-30
-# Author             : Alain Rioux (admin@le-tools.com)
+# XL-ParserConfig.pl	: Configuration functions for XL-Parser
+# Website     				: http://le-tools.com/XL-Parser.html
+# SourceForge					: https://sourceforge.net/p/xl-parser
+# GitHub							: https://github.com/arioux/XL-Parser
+# Creation						: 2016-07-15
+# Modified						: 2017-08-12
+# Author							: Alain Rioux (admin@le-tools.com)
 #
 # Copyright (C) 2016-2017 Alain Rioux (le-tools.com)
 #

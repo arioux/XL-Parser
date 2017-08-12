@@ -2,13 +2,13 @@
 # Perl - v: 5.16.3
 #------------------------------------------------------------------------------#
 # Tool name   : XL-Parser
-# Website     : http://le-tools.com/
-# GitHub		  : https://github.com/arioux/XL-Parser
-# Description : Part of the XL-Toolkit, XL-Parser provides a bunch of functions
-#               for data extraction and analysis.
+# Website     : http://le-tools.com/XL-Parser.html
+# SourceForge : https://sourceforge.net/p/xl-parser
+# GitHub      : https://github.com/arioux/XL-Parser
+# Description : Part of the XL-Toolkit, XL-Parser provides a bunch of functions for data extraction and analysis.
 # Creation    : 2016-07-15
-# Modified    : 2017-06-30
-my $VERSION   = '1.0';
+# Modified    : 2017-08-12
+my $VERSION   = '1.1';
 # Author      : Alain Rioux (admin@le-tools.com)
 #
 # Copyright (C) 2016-2017 Alain Rioux (le-tools.com)
@@ -991,6 +991,12 @@ $win->AddLabel(       -name         => 'lblLASearchOptT'       ,
                       -foreground   => [ 50, 180,  0]          ,
                       -text         => $STR{'Options'}.':'     ,
                       -font         => $fontGBu                ,
+                      -visible      => 0                       , );
+$win->AddButton(      -name         => 'btnLASearchReset'      ,
+                      -size         => [ 80, 22]               ,
+                      -pos          => [  5,380]               ,
+                      -text         => $STR{'Reset'}           ,
+                      -disabled     => 1                       ,
                       -visible      => 0                       , );
 $win->AddButton(      -name         => 'btnLASearchReportOpt'  ,
                       -size         => [120, 22]               ,
@@ -2322,6 +2328,7 @@ sub winMain_Resize
   $win->btnLASearchOpenResults->Top($topSection+80);
   $win->lblLASearchSAIndShadowT->Top($topSection+108);
   $win->lblLASearchSAIndT->Top($topSection+107);
+  $win->btnLASearchReset->Top($topSection+137);
   $win->gridLASearchSAInd->Top($topSection+107);
   $win->gridLASearchSAInd->Width($win->ScaleWidth()-115);
   $win->gridLASearchSAInd->Height($win->ScaleHeight()-$topSection-162);
@@ -2749,10 +2756,16 @@ sub createWinFileFormats
                               -fixedcolumns => 0                       ,
                               -editable     => 1                       , );
   $winFileFormats->gridFileFormats->SetListMode(1);
+  $winFileFormats->AddButton( -name         => 'btnFileFormatsReset'   ,
+                              -text         => $STR{'Reset'}           ,
+                              -size         => [ 70, 30]               ,
+                              -pos          => [160,315]               ,
+                              -font         => $font10                 ,
+                              -disabled     => 1                       , );
   $winFileFormats->AddButton( -name         => 'btnFileFormatsOk'      ,
                               -text         => $STR{'Ok'}              ,
                               -size         => [ 60, 30]               ,
-                              -pos          => [195,315]               ,
+                              -pos          => [240,315]               ,
                               -font         => $font10                 ,
                               -ok           => 1                       ,
                               -default      => 1                       , );
@@ -2807,10 +2820,22 @@ sub saveFileFormats
     if (open(my $json, '>:encoding(cp1252)', "$USERDIR\\FileFormats.json")) {
       print $json $jsonText;
       close($json);
+      $winFileFormats->btnFileFormatsReset->Enable();
     }
   }
   
 }  #--- End saveFileFormats
+
+#--------------------------#
+sub btnFileFormatsReset_Click
+#--------------------------#
+{
+  unlink("$USERDIR\\FileFormats.json") if -f "$USERDIR\\FileFormats.json";
+  $winFileFormats->gridFileFormats->DeleteNonFixedRows();
+  &loadFileFormatsGrid("$USERDIR\\FileFormats.json", \$winFileFormats, \%STR);
+  $winFileFormats->btnFileFormatsReset->Disable();
+
+}  #--- End btnFileFormatsReset_Click
 
 #--------------------------#
 sub btnFileFormatsOk_Click
@@ -3582,7 +3607,7 @@ sub isSelFileFiltersReady
   if ($nextStep) {
     $winSelFileFilters->btnSelFileFiltersOk->Disable();
     $winSelFileFilters->btnSelFileFiltersNotReady->Enable();
-    Win32::GUI::MessageBox($winSelFileFilters, "$STR{'notReady'} ?\n\n$STR{'nextStep'}: $nextStep", $STR{'notReady'}, 0x40040) if $confirm;
+    Win32::GUI::MessageBox($winSelFileFilters, "$STR{'notReady'}?\n\n$STR{'nextStep'}: $nextStep", $STR{'notReady'}, 0x40040) if $confirm;
   } else {
     $winSelFileFilters->btnSelFileFiltersOk->Enable();
     $winSelFileFilters->btnSelFileFiltersNotReady->Disable();
@@ -3916,6 +3941,7 @@ sub TabFunctions_Click
     $win->btnLASearchOpenResults->Hide();
     $win->lblLASearchSAIndShadowT->Hide();
     $win->lblLASearchSAIndT->Hide();
+    $win->btnLASearchReset->Hide();
     $win->gridLASearchSAInd->Hide();
     $win->gbCurrDBGeneral->Hide();
     $win->lblCurrDBLastUpdate->Hide();
@@ -4156,6 +4182,7 @@ sub TabFunctions_Click
     $win->btnLASearchOpenResults->Hide();
     $win->lblLASearchSAIndShadowT->Hide();
     $win->lblLASearchSAIndT->Hide();
+    $win->btnLASearchReset->Hide();
     $win->gridLASearchSAInd->Hide();
     $win->gbCurrDBGeneral->Hide();
     $win->lblCurrDBLastUpdate->Hide();
@@ -4911,6 +4938,7 @@ sub btnExtractExprAddDB_Click
   my $regex   = $winExtraction->chExtractExprRegex->Checked();
   my $invert  = $winExtraction->chExtractExprInvert->Checked();
   my $comment = $winExtraction->tfExtractComment->Text();
+  my $newLine;
   # Select or create Expression database
   my $exprDBFile = $winConfig->tfExprDB->Text();
   if (!-f $exprDBFile or !&validExprDB($exprDBFile)) {
@@ -4933,7 +4961,7 @@ sub btnExtractExprAddDB_Click
       return(0);
     } else {
       # Add to Grid
-      if (my $newLine = $winExtraction->gridExprDatabase->InsertRow($expr, -1)) {
+      if ($newLine = $winExtraction->gridExprDatabase->InsertRow($expr, -1)) {
         $winExtraction->gridExprDatabase->SetCellText($newLine, 0, 0);
         $winExtraction->gridExprDatabase->SetCellType($newLine, 1, 4);
         $winExtraction->gridExprDatabase->SetCellType($newLine, 2, 4);
@@ -4964,8 +4992,11 @@ sub btnExtractExprAddDB_Click
     }
   }
   # Return to database expression tab
-  $winSelFileFilters->TabSelFileFiltersType->SetCurSel(2);
-  &TabSelFileFiltersType_Change();
+  if ($newLine) {
+    $winExtraction->TabExtractType->SetCurSel(2);
+    &TabExtractType_Change();
+    $winExtraction->gridExprDatabase->EnsureCellVisible($newLine,0);
+  }
 
 }  #--- End btnExtractExprAddDB_Click
 
@@ -5996,7 +6027,7 @@ sub isExtractReady
   if ($nextStep) {
     $winExtraction->btnExtractOk->Disable();
     $winExtraction->btnExtractNotReady->Enable();
-    Win32::GUI::MessageBox($winExtraction, "$STR{'notReady'} ?\n\n$STR{'nextStep'}: $nextStep", $STR{'notReady'}, 0x40040) if $confirm;
+    Win32::GUI::MessageBox($winExtraction, "$STR{'notReady'}?\n\n$STR{'nextStep'}: $nextStep", $STR{'notReady'}, 0x40040) if $confirm;
   } else {
     $winExtraction->btnExtractOk->Enable();
     $winExtraction->btnExtractNotReady->Disable();
@@ -6035,7 +6066,7 @@ sub btnExtractOk_Click
   my $operator = 0;
   my $type     = $winExtraction->TabExtractType->SelectedItem();
   my $index    = 0;
-  $operator    = $winExtraction->cbExtractOp->GetString($winExtraction->cbExtractOp->GetCurSel()) if $winExtraction->cbExtractOp->IsEnabled() or $win->gridExtraction->GetRows() > 1;
+  $operator    = $winExtraction->cbExtractOp->GetString($winExtraction->cbExtractOp->GetCurSel());
   my %expressions;
   # Expression
   if (!$type) {
@@ -6045,9 +6076,9 @@ sub btnExtractOk_Click
     my $comment = $winExtraction->tfExtractComment->Text();
     for ($index = 0; $index <= $winExtraction->tfExtractExpr->GetLineCount(); $index++) {
       if ($winExtraction->tfExtractExpr->GetLine($index)) {
-        if ($operator)  { $expressions{$index}{operator} = $operator;  }
-        elsif (!$index) { $expressions{$index}{operator} = '-';        }
-        else            { $expressions{$index}{operator} = $STR{'OR'}; }
+        if    (!$index  ) { $expressions{$index}{operator} = '-';        }
+        elsif ($operator) { $expressions{$index}{operator} = $operator;  }
+        else              { $expressions{$index}{operator} = $STR{'OR'}; }
         $expressions{$index}{case}    = $case;
         $expressions{$index}{regex}   = $regex;
         $expressions{$index}{invert}  = $invert;
@@ -6063,9 +6094,9 @@ sub btnExtractOk_Click
     else           { $lastSelectedRow = $coord[0]; }
     for (my $row = $coord[0]; $row <= $lastSelectedRow; $row++) {
       if ($winExtraction->gridExprHistory->IsCellSelected($row, 4)) {
-        if ($operator)  { $expressions{$index}{operator} = $operator;  }
-        elsif (!$index) { $expressions{$index}{operator} = '-';        }
-        else            { $expressions{$index}{operator} = $STR{'OR'}; }
+        if    (!$index  ) { $expressions{$index}{operator} = '-';        }
+        elsif ($operator) { $expressions{$index}{operator} = $operator;  }
+        else              { $expressions{$index}{operator} = $STR{'OR'}; }
         $expressions{$index}{case}    = $winExtraction->gridExprHistory->GetCellCheck($row, 1);
         $expressions{$index}{regex}   = $winExtraction->gridExprHistory->GetCellCheck($row, 2);
         $expressions{$index}{invert}  = $winExtraction->gridExprHistory->GetCellCheck($row, 3);
@@ -6082,9 +6113,9 @@ sub btnExtractOk_Click
     else           { $lastSelectedRow = $coord[0]; }
     for (my $row = $coord[0]; $row <= $lastSelectedRow; $row++) {
       if ($winExtraction->gridExprDatabase->IsCellSelected($row, 4)) {
-        if ($operator)  { $expressions{$index}{operator} = $operator;  }
-        elsif (!$index) { $expressions{$index}{operator} = '-';        }
-        else            { $expressions{$index}{operator} = $STR{'OR'}; }
+        if    (!$index  ) { $expressions{$index}{operator} = '-';        }
+        elsif ($operator) { $expressions{$index}{operator} = $operator;  }
+        else              { $expressions{$index}{operator} = $STR{'OR'}; }
         $expressions{$index}{case}    = $winExtraction->gridExprDatabase->GetCellCheck($row, 1);
         $expressions{$index}{regex}   = $winExtraction->gridExprDatabase->GetCellCheck($row, 2);
         $expressions{$index}{invert}  = $winExtraction->gridExprDatabase->GetCellCheck($row, 3);
@@ -6694,6 +6725,7 @@ sub LAFunctionsTabUpdate
     $win->btnLASearchOpenResults->Hide();
     $win->lblLASearchSAIndShadowT->Hide();
     $win->lblLASearchSAIndT->Hide();
+    $win->btnLASearchReset->Hide();
     $win->gridLASearchSAInd->Hide();
   # Update Database controls
   } elsif ($functionStr eq $STR{'updateDB'}) {
@@ -6787,6 +6819,7 @@ sub LAFunctionsTabUpdate
     $win->btnLASearchOpenResults->Hide();
     $win->lblLASearchSAIndShadowT->Hide();
     $win->lblLASearchSAIndT->Hide();
+    $win->btnLASearchReset->Hide();
     $win->gridLASearchSAInd->Hide();
   # Query
   } elsif ($functionStr eq $STR{'QueryDB'}) {
@@ -6886,6 +6919,7 @@ sub LAFunctionsTabUpdate
     $win->lblLASearchSAIndShadowT->Hide();
     $win->lblLASearchSAIndShadowT->Hide();
     $win->lblLASearchSAIndT->Hide();
+    $win->btnLASearchReset->Hide();
     $win->gridLASearchSAInd->Hide();
   # Search suspect activites
   } elsif ($functionStr eq $STR{'SearchSA'}) {
@@ -6900,6 +6934,7 @@ sub LAFunctionsTabUpdate
     $win->btnLASearchOpenResults->Show();
     $win->lblLASearchSAIndShadowT->Show();
     $win->lblLASearchSAIndT->Show();
+    $win->btnLASearchReset->Show();
     $win->gridLASearchSAInd->Show();
     &loadSAIndGrid("$USERDIR\\SA_Indicators.json", \$win, \%STR) if $win->gridLASearchSAInd->GetRows() < 2;
     # Reset Select Columns Window
@@ -7833,7 +7868,7 @@ sub isLFObjReady
     $winLFObj->btnLFObjAdd->Disable();
     $winLFObj->btnLFObjEdit->Disable();
     $winLFObj->btnLFObjNotReady->Enable();
-    Win32::GUI::MessageBox($winLFObj, "$STR{'notReady'} ?\n\n$STR{'nextStep'}: $nextStep", $STR{'notReady'}, 0x40040) if $confirm;
+    Win32::GUI::MessageBox($winLFObj, "$STR{'notReady'}?\n\n$STR{'nextStep'}: $nextStep", $STR{'notReady'}, 0x40040) if $confirm;
   } else {
     $winLFObj->btnLFObjAdd->Enable();
     $winLFObj->btnLFObjEdit->Enable();
@@ -9460,7 +9495,7 @@ sub gridLASearchSAInd_EndEdit
     my $limit   = $win->gridLASearchSAInd->GetCellText($row, 3);
     my $options = $win->gridLASearchSAInd->GetCellText($row, 4);
     # If file already exists, load values
-    my $refIndicators = &loadSAInd("$USERDIR\\SA_Indicators.json", \%STR);
+    my $refIndicators = &loadSAInd("$USERDIR\\SA_Indicators.json", \$win, \%STR);
     # Save changes
     if ($$refIndicators{$row}{name} eq $name) {
       $$refIndicators{$row}{score}   = $score;
@@ -9472,6 +9507,7 @@ sub gridLASearchSAInd_EndEdit
       if (open(my $json, '>:encoding(cp1252)', "$USERDIR\\SA_Indicators.json")) {
         print $json $jsonText;
         close($json);
+        $win->btnLASearchReset->Enable();
       }
     }
   }
@@ -9592,19 +9628,59 @@ sub btnLASearchOpenResults_Click
     if (open(my $json, $resFile)) {
       my $jsonText = <$json>;
       close($json);
-      if ($jsonText =~ /"selIndicators":/ and $jsonText =~ /"ACTs":/ and $jsonText =~ /"ByIPs":/) {
+      # Valid database
+      if ($jsonText =~ /"selIndicators":/ and $jsonText =~ /"ACTs":/ and $jsonText =~ /"ByIPs":/ and
+          $jsonText =~ /"dbFile":"([^\"]+)"/) {
+        my $fileDbFile = $1;
+        if ($fileDbFile ne $win->tfInput->Text() and $fileDbFile =~ /\\([^\\]+)$/) {
+          my $filename = $1;
+          # Dbfile Path must be change in JSON file
+          if ($win->tfInput->Text() =~ /$filename/) {
+            if (open(my $json, $resFile)) { # Open the file
+              my $jsonText = <$json>;
+              close($json);
+              my $jsonObj     = JSON->new;
+              my $refResults  = $jsonObj->decode($jsonText);
+              $$refResults{dbFile}    = $win->tfInput->Text(); # Change the path
+              $$refResults{reportDir} = $$refResults{dbFile};
+              while (chop($$refResults{reportDir}) ne "\\") { } # Dir only
+              if (open(my $json, '>:encoding(cp1252)', $resFile)) { # Save the file
+                $jsonObj  = JSON->new;
+                $jsonText = $jsonObj->encode($refResults);
+                print $json $jsonText;
+                close($json);
+              }
+            }
+          # Results doesn't match the selected database
+          } else {
+            Win32::GUI::MessageBox($win, $STR{'errDBFilePath'}, $STR{'error'}, 0x40010);
+            return(1);
+          }
+        }
         # Open Suspicious Activities Results
         my $procID;
         if ($jsonText =~ /"procID":"([\d+]+)"/) { $procID = $1;   }
         else                                    { $procID = time; }
         my $command = 'XL-Parser-process ' . "LADB-SAResults $procID \"$PROGDIR\" \"$resFile\" \"$USERDIR\"";
         Win32::Process::Create(my $processObj, $PROGDIR .'\XL-Parser-process.exe', $command, 0, NORMAL_PRIORITY_CLASS, $PROGDIR);
+        $win->gridLASearchSAInd->BringWindowToTop();
       } else { Win32::GUI::MessageBox($win, $STR{'invalidFile'}, $STR{'error'}, 0x40010); }
     }
   }
   return(1);
   
 }  #--- End btnLASearchOpenResults_Click
+
+#--------------------------#
+sub btnLASearchReset_Click
+#--------------------------#
+{
+  unlink("$USERDIR\\SA_Indicators.json") if -f "$USERDIR\\SA_Indicators.json";
+  $win->gridLASearchSAInd->DeleteNonFixedRows();
+  &loadSAIndGrid("$USERDIR\\SA_Indicators.json", \$win, \%STR);
+  $win->btnLASearchReset->Disable();
+
+}  #--- End btnLASearchReset_Click
 
 #--------------------------#
 sub cbOutputDTFormat_Change
@@ -10522,7 +10598,7 @@ sub isFilterSetReady
   if ($nextStep) {
     $winFilterSet->btnFilterSetOk->Disable();
     $winFilterSet->btnFilterSetNotReady->Enable();
-    Win32::GUI::MessageBox($winFilterSet, "$STR{'notReady'} ?\n\n$STR{'nextStep'}: $nextStep", $STR{'notReady'}, 0x40040) if $confirm;
+    Win32::GUI::MessageBox($winFilterSet, "$STR{'notReady'}?\n\n$STR{'nextStep'}: $nextStep", $STR{'notReady'}, 0x40040) if $confirm;
   } else {
     $winFilterSet->btnFilterSetOk->Enable();
     $winFilterSet->btnFilterSetNotReady->Disable();
@@ -11252,7 +11328,7 @@ sub isFieldFilterReady
     $winFieldFilter->btnFieldFilterSaveDB->Disable();
     $winFieldFilter->btnFieldFilterOk->Disable();
     $winFieldFilter->btnFieldFilterNotReady->Enable();
-    Win32::GUI::MessageBox($winSelFileFilters, "$STR{'notReady'} ?\n\n$STR{'nextStep'}: $nextStep", $STR{'notReady'}, 0x40040) if $confirm;
+    Win32::GUI::MessageBox($winSelFileFilters, "$STR{'notReady'}?\n\n$STR{'nextStep'}: $nextStep", $STR{'notReady'}, 0x40040) if $confirm;
   } else {
     $winFieldFilter->btnFieldFilterAddDB->Enable();
     $winFieldFilter->btnFieldFilterSaveDB->Enable();
@@ -12212,7 +12288,7 @@ sub isDTObjReady
     $winDTObj->btnDTObjAdd->Disable();
     $winDTObj->btnDTObjEdit->Disable();
     $winDTObj->btnDTObjNotReady->Enable();
-    Win32::GUI::MessageBox($winDTObj, "$STR{'notReady'} ?\n\n$STR{'nextStep'}: $nextStep", $STR{'notReady'}, 0x40040) if $confirm;
+    Win32::GUI::MessageBox($winDTObj, "$STR{'notReady'}?\n\n$STR{'nextStep'}: $nextStep", $STR{'notReady'}, 0x40040) if $confirm;
   } else {
     $winDTObj->btnDTObjAdd->Enable();
     $winDTObj->btnDTObjEdit->Enable();
@@ -12886,6 +12962,7 @@ sub changePath_Click
       $winLACurrDBFiles->gridCurrDBListFiles->Refresh();
     } else { Win32::GUI::MessageBox($winLACurrDBFiles, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010); }
   }
+  return(1);
 
 }  #--- End changePath_Click
 
@@ -13317,7 +13394,7 @@ sub firstStart
         $winConfig->tfIINDB->Text($defaultPath);
         $$refWinCW->lblDLIINDBDone->Show();
       } else {
-        $$refWinCW->lblDLGeoIPDB->Text($STR{'Downloading'}.' '.$STR{'IINLocalDB2'});
+        $$refWinCW->lblDLIINDB->Text($STR{'Downloading'}.' '.$STR{'IINLocalDB2'});
         $return = &downloadIINDB("$dir\\IIN.db", $dir, \$HOURGLASS, \$ARROW, $CONFIG_FILE, \%CONFIG, \$winConfig,
                                  \$winPb, \$win, \%STR);
         if ($return) { # Error
@@ -13440,7 +13517,7 @@ sub firstStart
         $winConfig->tfResTLDDB->Text($defaultPath);
         $$refWinCW->lblResTLDDBDone->Show();
       } else {
-        $$refWinCW->lblDLGeoIPDB->Text($STR{'Downloading'}.' '.$STR{'ResTLDDB'});
+        $$refWinCW->lblDLTLDDB->Text($STR{'Downloading'}.' '.$STR{'ResTLDDB'});
         $return = &downloadResTLDDB("$dir\\Resolve TLD.db", $dir, \$HOURGLASS, \$ARROW, $CONFIG_FILE, \%CONFIG,
                                     \$winConfig, \$winPb, \$win, \%STR);
         if ($return) { 
@@ -13464,7 +13541,7 @@ sub firstStart
         } else { $winReport->cbOutputDTFormat->SetCurSel(0); }
         $$refWinCW->lblDLDTDBDone->Show();
       } else { # No DTDB, download it
-        $$refWinCW->lblDLGeoIPDB->Text($STR{'Downloading'}.' '.$STR{'winDTDB'});
+        $$refWinCW->lblDLTLDDB->Text($STR{'Downloading'}.' '.$STR{'winDTDB'});
         $return = &downloadDTDB("$dir\\DT.db", $dir, \$HOURGLASS, \$ARROW, $CONFIG_FILE, \%CONFIG, \$winConfig,
                                 \$winLFObj, \$winDTDB, \$winReport, \$winPb, \$win, \%STR);
         if ($return) { 
@@ -15327,7 +15404,7 @@ sub isProcessReady
   if ($nextStep) {
     $win->btnProcess->Disable();
     $win->lblNotReady->Show();
-    Win32::GUI::MessageBox($win, "$STR{'notReady'} ?\n\n$STR{'nextStep'}: $nextStep", $STR{'notReady'}, 0x40040) if $confirm;
+    Win32::GUI::MessageBox($win, "$STR{'notReady'}?\n\n$STR{'nextStep'}: $nextStep", $STR{'notReady'}, 0x40040) if $confirm;
   } else {
     $win->btnProcess->Enable();
     $win->lblNotReady->Hide();

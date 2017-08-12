@@ -1,12 +1,13 @@
 #!/usr/bin/perl
 # Perl - v: 5.16.3
 #------------------------------------------------------------------------------#
-# XL-ParserExtract.pl : Extract functions for XL-Parser
-# Website             : http://le-tools.com/
-# GitHub		          : https://github.com/arioux/XL-Parser
-# Creation            : 2016-07-15
-# Modified            : 2017-06-30
-# Author              : Alain Rioux (admin@le-tools.com)
+# XL-ParserExtract.pl	: Extract functions for XL-Parser
+# Website     				: http://le-tools.com/XL-Parser.html
+# SourceForge					: https://sourceforge.net/p/xl-parser
+# GitHub							: https://github.com/arioux/XL-Parser
+# Creation						: 2016-07-15
+# Modified						: 2017-08-12
+# Author							: Alain Rioux (admin@le-tools.com)
 #
 # Copyright (C) 2016-2017  Alain Rioux (le-tools.com)
 #
@@ -986,7 +987,7 @@ sub loadFileFormatsGrid
 	$$refWinFileFormats->gridFileFormats->SetCellFormat(0, 3, 1);
   # Insert file formats in grid
   $$refWinFileFormats->gridFileFormats->SetRows(13);
-  my $refFileFormats = &loadFileFormats($jsonFile, $refSTR);
+  my $refFileFormats = &loadFileFormats($jsonFile, $refWinFileFormats, $refSTR);
   foreach my $index (sort { $a <=> $b } keys %{$refFileFormats}) {
 		$$refWinFileFormats->gridFileFormats->SetCellType(      $index, 0, 4);
 		$$refWinFileFormats->gridFileFormats->SetCellText(      $index, 1, $$refFileFormats{$index}{name});
@@ -1015,7 +1016,7 @@ sub loadFileFormats
 #--------------------------#
 {
   # Local variables
-  my ($jsonFile, $refSTR) = @_;
+  my ($jsonFile, $refWinFileFormats, $refSTR) = @_;
   my %fileFormats;
   my $refFileFormats = \%fileFormats;
   # If file already exists, load values
@@ -1024,6 +1025,7 @@ sub loadFileFormats
     close($json);
     my $jsonObj = JSON->new;
     $refFileFormats = $jsonObj->decode($jsonText);
+		$$refWinFileFormats->btnFileFormatsReset->Enable();
   # File don't exist, set default values
   } else {
     # Plain text

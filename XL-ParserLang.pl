@@ -1,12 +1,13 @@
 #!/usr/bin/perl
 # Perl - v: 5.16.3
 #------------------------------------------------------------------------------#
-# XL-ParserLang.pl : Strings for XL-Parser
-# Website          : http://le-tools.com/
-# GitHub		       : https://github.com/arioux/XL-Parser
-# Creation         : 2016-07-15
-# Modified         : 2017-06-30
-# Author           : Alain Rioux (admin@le-tools.com)
+# XL-ParserLang.pl  : Strings for XL-Parser
+# Website     			: http://le-tools.com/XL-Parser.html
+# SourceForge				: https://sourceforge.net/p/xl-parser
+# GitHub						: https://github.com/arioux/XL-Parser
+# Creation          : 2016-07-15
+# Modified          : 2017-08-12
+# Author            : Alain Rioux (admin@le-tools.com)
 #
 # Copyright (C) 2016-2017 Alain Rioux (le-tools.com)
 #
@@ -44,8 +45,8 @@ sub loadStr
     chomp($_);
     s/[^\w\=\s\.\!\,\-\)\(\']//g;
     my ($key, $value) = split(/ = /, $_);
-    $value = encode("cp1252", $value); # Revaluate with different language encoding
-    $$refSTR{$key}  = $value if $key;
+    $value            = encode('cp1252', $value); # Encode
+    $$refSTR{$key}    = $value if $key;
   }
   
 }  #--- End loadStr
@@ -183,6 +184,7 @@ sub loadDefaultStr
   $$refSTR{'errSpace'}        = 'There is not enough space on the choosen destination folder.';
   $$refSTR{'warnLookup'}      = 'Nslookup requires an active internet connection. Based on the number of results, it might take a while. You should use this with caution.';
   $$refSTR{'dbExists'}        = 'Database exists in the destination folder, replace it';
+  $$refSTR{'errDBFilePath'}   = 'File does not match the database';
   # Main Window
   $$refSTR{'rbInputDir'}         = 'Dir';
   $$refSTR{'chInputDirRecurse'}  = 'Subfolders';
@@ -338,7 +340,8 @@ sub loadDefaultStr
   $$refSTR{'Indicators'}          = 'Indicators';
   $$refSTR{'Indicator'}           = 'Indicator';
   $$refSTR{'SDSAI1'}              = 'High number of requests';
-  $$refSTR{'SDSAI2'}              = 'Request length';
+  $$refSTR{'SDSAI2a'}             = 'Request length (nbr)';
+  $$refSTR{'SDSAI2b'}             = 'Request length (max)';
   $$refSTR{'SDSAI3'}              = 'URI Encoding';
   $$refSTR{'SDSAI4'}              = 'HTTP Method';
   $$refSTR{'SDSAI5'}              = 'High number of errors';

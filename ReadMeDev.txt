@@ -2,7 +2,7 @@ XL-Parser
 Description		: Part of the XL-Toolkit, XL-Parser provides a bunch of functions for data extraction and analysis.
 Author				: Alain Rioux (admin@le-tools.com)
 WebSite				: http://le-tools.com/XL-Parser.html
-CodePlex			: https://xlparser.codeplex.com/
+SourceForge		: https://sourceforge.net/p/xl-parser
 GitHub				: https://github.com/arioux/XL-Parser
 Documentation	: http://le-tools.com/XL-ParserDoc.html
 
@@ -61,13 +61,9 @@ To do
 -----
 
 
-
 Packaging
 ---------
 
-Executable has been packaged using PerlApp v.9.2.1 (ActiveState). For alternative to PerlApp, see 
-http://www.nicholassolutions.com/tutorials/perl-PAR.htm.
+Executable has been packaged using PerlApp v.9.2.1 (ActiveState). For alternative to PerlApp, see http://www.nicholassolutions.com/tutorials/perl-PAR.htm.
 
 Some additional modules may be required or manually added before packaging. 
-
-
