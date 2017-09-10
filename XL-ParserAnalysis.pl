@@ -6,7 +6,7 @@
 # SourceForge						: https://sourceforge.net/p/xl-parser
 # GitHub								: https://github.com/arioux/XL-Parser
 # Creation							: 2016-07-15
-# Modified							: 2017-08-12
+# Modified							: 2017-09-10
 # Author								: Alain Rioux (admin@le-tools.com)
 #
 # Copyright (C) 2016-2017 Alain Rioux (le-tools.com)
@@ -30,9 +30,9 @@
 use strict;
 use warnings;
 use DateTime;
+use DateTime::TimeZone;
 use DateTime::Format::Duration;
 use DateTime::Format::Strptime;
-use DateTime::TimeZone;
 use JSON qw(encode_json decode_json);
 use Regexp::IPv6 qw($IPv6_re);
 use Win32::File;
@@ -389,8 +389,8 @@ sub updateCurrDatabaseInfos
   $$refWin->lblCurrDBResWDsVal->Text('');
   $$refWinLACurrDBFiles->gridCurrDBListFiles->DeleteNonFixedRows() if $$refWinLACurrDBFiles;
   # Connect to Log database
-  my $inputDButf8 = encode('utf8', $inputDB);
-  my $dsn = "DBI:SQLite:dbname=$inputDButf8";
+  $inputDB = encode('utf8', $inputDB);
+  my $dsn	 = "DBI:SQLite:dbname=$inputDB";
   if (my $dbh = DBI->connect($dsn, undef, undef, { })) {
     # Gather and show infos
     my ($startTime, $endTime, $filtered, $rejected);
@@ -402,8 +402,8 @@ sub updateCurrDatabaseInfos
         $lastUpdateTime->set_time_zone($timezone);
         $$refWin->lblCurrDBLastUpdateVal->Text($lastUpdateTime->strftime('%F %T'));
       }
-      elsif ($key eq 'firstDT'         ) { $startTime = $value; }
-      elsif ($key eq 'lastDT'          ) { $endTime   = $value; }
+      elsif ($key eq 'firstDT'       ) { $startTime = $value; }
+      elsif ($key eq 'lastDT'        ) { $endTime   = $value; }
       elsif ($key eq 'nbrLogEntries' ) { $$refWin->lblCurrDBNbrEntriesVal->Text($value); }
       elsif ($key eq 'nbrRejected' and $value) {
         $$refWin->lblCurrDBRejectedVal->Text($value);
@@ -725,8 +725,8 @@ sub listValFilterFieldDB
   my ($field, $dbFile, $refWin, $refSTR) = @_;
   my @listVal;
   # Connect to database
-  $dbFile    = encode('utf8', $dbFile);
-  my $dsn    = "DBI:SQLite:dbname=$dbFile";
+  $dbFile = encode('utf8', $dbFile);
+  my $dsn = "DBI:SQLite:dbname=$dbFile";
   if (my $dbhLog = DBI->connect($dsn, undef, undef, { })) {
     my $all;
     if    ($field eq $$refSTR{'LFclientIP'}  ) { $all = $dbhLog->selectall_arrayref('SELECT DISTINCT remoteIP FROM LOG ORDER BY remoteIP ASC');           }
@@ -1089,6 +1089,7 @@ sub delLAFilterSetDB
 {
   # Local variables
   my ($LAFilterSetDBFile, $category, $name) = @_;
+	$LAFilterSetDBFile = encode('utf8', $LAFilterSetDBFile);
   my $dsn = "DBI:SQLite:dbname=$LAFilterSetDBFile";
   if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
     my $sth = $dbh->prepare('DELETE FROM FILTER_SET WHERE category == ? AND name == ?');

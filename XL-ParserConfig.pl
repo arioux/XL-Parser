@@ -6,7 +6,7 @@
 # SourceForge					: https://sourceforge.net/p/xl-parser
 # GitHub							: https://github.com/arioux/XL-Parser
 # Creation						: 2016-07-15
-# Modified						: 2017-08-12
+# Modified						: 2017-09-10
 # Author							: Alain Rioux (admin@le-tools.com)
 #
 # Copyright (C) 2016-2017 Alain Rioux (le-tools.com)
@@ -256,6 +256,7 @@ sub validMACOUIDB
   my $MACOUIDBFile = shift;
   if (-f $MACOUIDBFile) {
     # Connect to DB
+		$MACOUIDBFile = encode('utf8', $MACOUIDBFile);
     my $dsn = "DBI:SQLite:dbname=$MACOUIDBFile";
     if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
       my $sth;
@@ -474,6 +475,7 @@ sub importMACOUIDatabase
 		}
 		# Create the database and the table
     $$refWinPb->lblPbCurr->Text($$refSTR{'createDBTable'}.'...');
+		$localMACOUIDB = encode('utf8', $localMACOUIDB);
     my $dsn = "DBI:SQLite:dbname=$localMACOUIDB";
     if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 0 })) {
       # Create the table
@@ -733,6 +735,7 @@ sub createExprHistoDB
   # Local variables
   my $exprHistoDBFile = shift;
   # Create a new database
+	$exprHistoDBFile = encode('utf8', $exprHistoDBFile);
   my $dsn = "DBI:SQLite:dbname=$exprHistoDBFile";
   my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 }) or return(0);
   # Create main table
@@ -760,6 +763,7 @@ sub loadExprHistoDB
 	my ($exprHistoDBFile, $refWinExtraction, $timezone, $refWin, $refSTR) = @_;
   if (-f $exprHistoDBFile) {
     # Connect to DB
+		$exprHistoDBFile = encode('utf8', $exprHistoDBFile);
     my $dsn = "DBI:SQLite:dbname=$exprHistoDBFile";
     my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
               or Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.$DBI::errstr, $$refSTR{'error'}, 0x40010);
@@ -819,8 +823,9 @@ sub createExprDB
   # Local variables
   my $exprDBFile = shift;
   # Create a new database
-  my $dsn = "DBI:SQLite:dbname=$exprDBFile";
-  my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 }) or return(0);
+	$exprDBFile = encode('utf8', $exprDBFile);
+  my $dsn 		= "DBI:SQLite:dbname=$exprDBFile";
+  my $dbh 		= DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 }) or return(0);
   # Create main table
   # used: Number of times that expression has been used (most used are displayed first)
   my $stmt = qq(CREATE TABLE IF NOT EXISTS EXPR_DB
@@ -846,9 +851,10 @@ sub loadExprDB
 	my ($exprHistoDBFile, $refWinExtraction, $refWin, $refSTR) = @_;
   if (-f $exprHistoDBFile) {
     # Connect to DB
-    my $dsn = "DBI:SQLite:dbname=$exprHistoDBFile";
-    my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
-              or Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.$DBI::errstr, $$refSTR{'error'}, 0x40010);
+		$exprHistoDBFile = encode('utf8', $exprHistoDBFile);
+    my $dsn 				 = "DBI:SQLite:dbname=$exprHistoDBFile";
+    my $dbh 				 = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
+										 or Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.$DBI::errstr, $$refSTR{'error'}, 0x40010);
     # Check if EXPR_DB table exists
     my $sth;
     eval { $sth = $dbh->table_info(undef, undef, '%', 'TABLE'); };
@@ -904,7 +910,8 @@ sub validExprHistoDB
   my $exprHistoDBFile = shift;
   if (-f $exprHistoDBFile) {
     # Connect to DB
-    my $dsn = "DBI:SQLite:dbname=$exprHistoDBFile";
+		$exprHistoDBFile = encode('utf8', $exprHistoDBFile);
+    my $dsn 				 = "DBI:SQLite:dbname=$exprHistoDBFile";
     if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
       my $sth;
       eval { $sth = $dbh->table_info(undef, undef, '%', 'TABLE'); };
@@ -927,6 +934,7 @@ sub validExprDB
   my $exprDBFile = shift;
   if (-f $exprDBFile) {
     # Connect to DB
+		$exprDBFile = encode('utf8', $exprDBFile);
     my $dsn = "DBI:SQLite:dbname=$exprDBFile";
     if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
       my $sth;
@@ -950,7 +958,8 @@ sub validLFDB
   my $LFDBFile = shift;
   if (-f $LFDBFile) {
     # Connect to DB
-    my $dsn = "DBI:SQLite:dbname=$LFDBFile";
+		$LFDBFile = encode('utf8', $LFDBFile);
+    my $dsn 	= "DBI:SQLite:dbname=$LFDBFile";
     if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
       my $sth;
       eval { $sth = $dbh->table_info(undef, undef, '%', 'TABLE'); };
@@ -1081,7 +1090,8 @@ sub validXLWHOISDB
   my $XLWHOISDBFile = shift;
   if (-f $XLWHOISDBFile) {
     # Connect to DB
-    my $dsn = "DBI:SQLite:dbname=$XLWHOISDBFile";
+		$XLWHOISDBFile = encode('utf8', $XLWHOISDBFile);
+    my $dsn 			 = "DBI:SQLite:dbname=$XLWHOISDBFile";
     if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
       my $sth;
       eval { $sth = $dbh->table_info(undef, undef, '%', 'TABLE'); };
@@ -1417,7 +1427,8 @@ sub validResTLDDB
   my $resTLDDBFile = shift;
   if (-f $resTLDDBFile) {
     # Connect to DB
-    my $dsn = "DBI:SQLite:dbname=$resTLDDBFile";
+		$resTLDDBFile = encode('utf8', $resTLDDBFile);
+    my $dsn 			= "DBI:SQLite:dbname=$resTLDDBFile";
     if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
       my $sth;
       eval { $sth = $dbh->table_info(undef, undef, '%', 'TABLE'); };
@@ -1539,7 +1550,8 @@ sub validDTDB
   my $DTDBFile = shift;
   if (-f $DTDBFile) {
     # Connect to DB
-    my $dsn = "DBI:SQLite:dbname=$DTDBFile";
+		$DTDBFile = encode('utf8', $DTDBFile);
+    my $dsn 	= "DBI:SQLite:dbname=$DTDBFile";
     if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
       my $sth;
       eval { $sth = $dbh->table_info(undef, undef, '%', 'TABLE'); };

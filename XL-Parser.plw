@@ -7,8 +7,8 @@
 # GitHub      : https://github.com/arioux/XL-Parser
 # Description : Part of the XL-Toolkit, XL-Parser provides a bunch of functions for data extraction and analysis.
 # Creation    : 2016-07-15
-# Modified    : 2017-08-12
-my $VERSION   = '1.1';
+# Modified    : 2017-09-10
+my $VERSION   = '1.1.1';
 # Author      : Alain Rioux (admin@le-tools.com)
 #
 # Copyright (C) 2016-2017 Alain Rioux (le-tools.com)
@@ -37,14 +37,14 @@ use Win32::GUI::Grid;
 use Win32::Clipboard;
 use Win32::Process;
 use Win32::DriveInfo;
+use B::Hooks::EndOfScope::PP::FieldHash;
+use B::Hooks::EndOfScope::PP;
+use Params::Validate::PP;
 use DateTime;
+use DateTime::TimeZone;
 use DateTime::Format::Duration;
 use DateTime::Format::Strptime;
-use DateTime::TimeZone;
 use Encode qw(encode);
-use Params::Validate::PP;
-use B::Hooks::EndOfScope::PP;
-use B::Hooks::EndOfScope::PP::FieldHash;
 use Extract::Regex; # This is a personal module
 use LWP::UserAgent;
 use DBI;
@@ -2905,7 +2905,7 @@ sub tfInput_Change
   }
   &isProcessReady(0);
   
-}  #--- End winFileFormats_Terminate
+}  #--- End tfInput_Change
 
 #--------------------------#
 sub btnInput_Click
@@ -4945,7 +4945,8 @@ sub btnExtractExprAddDB_Click
     $exprDBFile = "$USERDIR\\Expr.db";
     $winConfig->tfExprDB->Text($exprDBFile) if &createExprDB($exprDBFile);
   }
-  my $dsn = "DBI:SQLite:dbname=$exprDBFile";
+  $exprDBFile = encode('utf8', $exprDBFile);
+  my $dsn     = "DBI:SQLite:dbname=$exprDBFile";
   if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
     # Verify if it already exists
     if ($dbh->selectrow_array('SELECT expr FROM EXPR_DB WHERE expr == ?', undef, $expr)) {
@@ -5012,6 +5013,7 @@ sub btnExtractExprSaveDB_Click
   my $invert     = $winExtraction->chExtractExprInvert->Checked();
   my $comment    = $winExtraction->tfExtractComment->Text();
   my $exprDBFile = $winConfig->tfExprDB->Text();
+  $exprDBFile    = encode('utf8', $exprDBFile);
   my $dsn = "DBI:SQLite:dbname=$exprDBFile";
   my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
             or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
@@ -5487,9 +5489,10 @@ sub exprHistoAddToDB_Click
     $winExtraction->Disable();
     $winExtraction->ChangeCursor($HOURGLASS);
     # Connect to DB
-    my $dsn = "DBI:SQLite:dbname=$exprDBFile";
-    my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
-              or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+    $exprDBFile = encode('utf8', $exprDBFile);
+    my $dsn     = "DBI:SQLite:dbname=$exprDBFile";
+    my $dbh     = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
+                  or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
     # Database: table = EXPR_DB, Fields = used, matchcase, regex, invert, expr, comment
     my $sth = $dbh->prepare('INSERT INTO EXPR_DB (used, matchcase, regex, invert, expr, comment) VALUES(?,?,?,?,?,?)');
     # Loop each entry and add
@@ -5602,9 +5605,10 @@ sub exprHistoDelete_Click
     $winPb->Show();
     $winExtraction->Disable();
     $winExtraction->ChangeCursor($HOURGLASS);
-    my $dsn = "DBI:SQLite:dbname=$exprHistoDBFile";
-    my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
-              or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+    $exprHistoDBFile = encode('utf8', $exprHistoDBFile);
+    my $dsn          = "DBI:SQLite:dbname=$exprHistoDBFile";
+    my $dbh          = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
+                       or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
     # Loop each entry and delete
     my $j = 0;
     foreach my $exprEntry2del (@Entries2del) {
@@ -5761,9 +5765,10 @@ sub gridExprDatabase_Click
     # Add or modify comment in Expression Database
     if (-f $exprDBFile) {
       # Connect to DB
-      my $dsn = "DBI:SQLite:dbname=$exprDBFile";
-      my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
-                or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+      $exprDBFile = encode('utf8', $exprDBFile);
+      my $dsn     = "DBI:SQLite:dbname=$exprDBFile";
+      my $dbh     = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
+                    or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
       # Database: table = EXPR_DB, Fields = used, matchcase, regex, invert, expr, comment
       my $sth = $dbh->prepare('UPDATE EXPR_DB SET matchcase = ?, regex = ?, invert = ? WHERE ? == expr');
       my $rv  = $sth->execute($winExtraction->gridExprDatabase->GetCellCheck($row, 1),
@@ -5841,9 +5846,10 @@ sub gridExprDatabase_EndEdit
     # Add or modify comment in Expression Database
     if (-f $exprDBFile) {
       # Connect to DB
-      my $dsn = "DBI:SQLite:dbname=$exprDBFile";
-      my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
-                or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+      $exprDBFile = encode('utf8', $exprDBFile);
+      my $dsn     = "DBI:SQLite:dbname=$exprDBFile";
+      my $dbh     = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
+                    or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
       # Database: table = EXPR_DB, Fields = used, matchcase, regex, invert, expr, comment
       my $sth = $dbh->prepare('UPDATE EXPR_DB SET comment = ? WHERE ? == expr');
       my $rv  = $sth->execute($winExtraction->gridExprDatabase->GetCellText($row, 4), $expr);
@@ -5917,9 +5923,10 @@ sub exprDBDelete_Click
     $winExtraction->Disable();
     $winExtraction->ChangeCursor($HOURGLASS);
     # Connect to DB
-    my $dsn = "DBI:SQLite:dbname=$exprDBFile";
-    my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
-              or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+    $exprDBFile = encode('utf8', $exprDBFile);
+    my $dsn     = "DBI:SQLite:dbname=$exprDBFile";
+    my $dbh     = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
+                  or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
     # Loop each entry and delete
     my $j = 0;
     foreach my $exprEntry2del (@Entries2del) {
@@ -6076,9 +6083,8 @@ sub btnExtractOk_Click
     my $comment = $winExtraction->tfExtractComment->Text();
     for ($index = 0; $index <= $winExtraction->tfExtractExpr->GetLineCount(); $index++) {
       if ($winExtraction->tfExtractExpr->GetLine($index)) {
-        if    (!$index  ) { $expressions{$index}{operator} = '-';        }
-        elsif ($operator) { $expressions{$index}{operator} = $operator;  }
-        else              { $expressions{$index}{operator} = $STR{'OR'}; }
+        if ($operator) { $expressions{$index}{operator} = $operator;  }
+        else           { $expressions{$index}{operator} = $STR{'OR'}; }
         $expressions{$index}{case}    = $case;
         $expressions{$index}{regex}   = $regex;
         $expressions{$index}{invert}  = $invert;
@@ -6094,9 +6100,8 @@ sub btnExtractOk_Click
     else           { $lastSelectedRow = $coord[0]; }
     for (my $row = $coord[0]; $row <= $lastSelectedRow; $row++) {
       if ($winExtraction->gridExprHistory->IsCellSelected($row, 4)) {
-        if    (!$index  ) { $expressions{$index}{operator} = '-';        }
-        elsif ($operator) { $expressions{$index}{operator} = $operator;  }
-        else              { $expressions{$index}{operator} = $STR{'OR'}; }
+        if ($operator) { $expressions{$index}{operator} = $operator;  }
+        else           { $expressions{$index}{operator} = $STR{'OR'}; }
         $expressions{$index}{case}    = $winExtraction->gridExprHistory->GetCellCheck($row, 1);
         $expressions{$index}{regex}   = $winExtraction->gridExprHistory->GetCellCheck($row, 2);
         $expressions{$index}{invert}  = $winExtraction->gridExprHistory->GetCellCheck($row, 3);
@@ -6113,9 +6118,8 @@ sub btnExtractOk_Click
     else           { $lastSelectedRow = $coord[0]; }
     for (my $row = $coord[0]; $row <= $lastSelectedRow; $row++) {
       if ($winExtraction->gridExprDatabase->IsCellSelected($row, 4)) {
-        if    (!$index  ) { $expressions{$index}{operator} = '-';        }
-        elsif ($operator) { $expressions{$index}{operator} = $operator;  }
-        else              { $expressions{$index}{operator} = $STR{'OR'}; }
+        if ($operator) { $expressions{$index}{operator} = $operator;  }
+        else           { $expressions{$index}{operator} = $STR{'OR'}; }
         $expressions{$index}{case}    = $winExtraction->gridExprDatabase->GetCellCheck($row, 1);
         $expressions{$index}{regex}   = $winExtraction->gridExprDatabase->GetCellCheck($row, 2);
         $expressions{$index}{invert}  = $winExtraction->gridExprDatabase->GetCellCheck($row, 3);
@@ -6132,7 +6136,8 @@ sub btnExtractOk_Click
       if ($expressions{$i}{expr}) {
         if ($editRow) { $row = $editRow++; } # Edit mode
         else          { $row = $win->gridExtraction->InsertRow('-', -1); }
-        $win->gridExtraction->SetCellText($row, 0, $expressions{$i}{operator});
+        if ($row == 1) { $win->gridExtraction->SetCellText($row, 0, '-'                       ); }
+        else           { $win->gridExtraction->SetCellText($row, 0, $expressions{$i}{operator}); }
         $win->gridExtraction->SetCellEditable($row, 0, 1);
         $win->gridExtraction->SetCellType($row, 0, 6);
         $win->gridExtraction->SetCellOptions($row, 0, [$STR{'OR'}, $STR{'AND'}]);
@@ -7897,7 +7902,8 @@ sub btnLFObjAdd_Click
     $winConfig->tfLFDB->Text($LFDBFile) if &createLFDB($LFDBFile);
   }
   # Add to database
-  my $dsn = "DBI:SQLite:dbname=$LFDBFile";
+  $LFDBFile = encode('utf8', $LFDBFile);
+  my $dsn   = "DBI:SQLite:dbname=$LFDBFile";
   if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
     # Database: table = LF, Fields = name, sample, pattern, regex
     my $sth = $dbh->prepare('INSERT INTO LF (name, sample, pattern, regex) VALUES(?,?,?,?)');
@@ -7937,7 +7943,8 @@ sub btnLFObjEdit_Click
   my $regex    = $winLFObj->tfLFObjRegex->Text();
   my $LFDBFile = $winConfig->tfLFDB->Text();
   # Update database
-  my $dsn = "DBI:SQLite:dbname=$LFDBFile";
+  $LFDBFile = encode('utf8', $LFDBFile);
+  my $dsn   = "DBI:SQLite:dbname=$LFDBFile";
   if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
     # Database: table = LF, Fields = name, sample, pattern, regex
     my $sth = $dbh->prepare('UPDATE LF SET sample = ?, pattern = ?, regex = ? WHERE ? == name');
@@ -7979,7 +7986,8 @@ sub btnLFDel_Click
   my $selRow = ($winLFDB->gridLF->GetSelectedCellRange())[0];
   my $LFName = $winLFDB->gridLF->GetCellText($selRow, 0);
   # Delete in Datetime database
-  my $dsn = "DBI:SQLite:dbname=$LFDBFile";
+  $LFDBFile = encode('utf8', $LFDBFile);
+  my $dsn   = "DBI:SQLite:dbname=$LFDBFile";
   if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
     my $sth = $dbh->prepare('DELETE FROM LF WHERE name == ?');
     my $rv = $sth->execute($LFName);
@@ -9044,7 +9052,8 @@ sub savedQueriesEdit_Click
   # Feed category combobox
   if (my $savedQueriesDB = $CONFIG{'SAVED_QUERIES_DB_FILE'}) {
     if ($savedQueriesDB and -f $savedQueriesDB and &validSavedQueriesDB($savedQueriesDB)) {
-      my $dsn = "DBI:SQLite:dbname=$savedQueriesDB";
+      $savedQueriesDB = encode('utf8', $savedQueriesDB);
+      my $dsn         = "DBI:SQLite:dbname=$savedQueriesDB";
       if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1 })) {
         my $all = $dbh->selectall_arrayref('SELECT DISTINCT cat FROM QUERIES ORDER BY cat ASC');
         foreach my $row (@$all) { $winSaveQuery->cbSQLQueryCat->AddString(@$row[0]); }
@@ -9101,7 +9110,8 @@ sub savedQueriesDelete_Click
     $winLASavedQueries->Disable();
     $winLASavedQueries->ChangeCursor($HOURGLASS);
     # Connect to DB
-    my $dsn = "DBI:SQLite:dbname=$savedQueriesDB";
+    $savedQueriesDB = encode('utf8', $savedQueriesDB);
+    my $dsn         = "DBI:SQLite:dbname=$savedQueriesDB";
     if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 0, AutoCommit => 1 })) {
       # Loop each entry and delete
       my $j = 0;
@@ -9261,7 +9271,8 @@ sub btnLAQuerySave_Click
   # Feed category combobox
   if (my $savedQueriesDB = $CONFIG{'SAVED_QUERIES_DB_FILE'}) {
     if ($savedQueriesDB and -f $savedQueriesDB and &validSavedQueriesDB($savedQueriesDB)) {
-      my $dsn = "DBI:SQLite:dbname=$savedQueriesDB";
+      $savedQueriesDB = encode('utf8', $savedQueriesDB);
+      my $dsn         = "DBI:SQLite:dbname=$savedQueriesDB";
       if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1 })) {
         my $all = $dbh->selectall_arrayref('SELECT DISTINCT cat FROM QUERIES ORDER BY cat ASC');
         foreach my $row (@$all) { $winSaveQuery->cbSQLQueryCat->AddString(@$row[0]); }
@@ -9337,7 +9348,8 @@ sub btnSQLQueryOk_Click
     }
   }
   # Add or edit in database
-  my $dsn = "DBI:SQLite:dbname=$savedQueriesDB";
+  $savedQueriesDB = encode('utf8', $savedQueriesDB);
+  my $dsn         = "DBI:SQLite:dbname=$savedQueriesDB";
   if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
     # Test if name already exists
     if (!$editRow and $dbh->selectrow_array('SELECT name FROM QUERIES WHERE name == ?', undef, $queryName)) {
@@ -11070,9 +11082,10 @@ sub FFDBDelete_Click
     $winFieldFilter->Disable();
     $winFieldFilter->ChangeCursor($HOURGLASS);
     # Connect to DB
-    my $dsn = "DBI:SQLite:dbname=$LAFiltersDBFile";
-    my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
-              or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+    $LAFiltersDBFile = encode('utf8', $LAFiltersDBFile);
+    my $dsn          = "DBI:SQLite:dbname=$LAFiltersDBFile";
+    my $dbh          = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
+                       or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
     # Loop each entry and delete
     my $j = 0;
     foreach my $idEntry2del (@Entries2del) {
@@ -11153,7 +11166,8 @@ sub btnFieldFilterAddDB_Click
     $winConfig->tfLAFiltersDB->Text($LAFiltersDBFile) if &createLAFiltersDB($LAFiltersDBFile);
   }
   # Add to Log Analysis Filters database
-  my $dsn = "DBI:SQLite:dbname=$LAFiltersDBFile";
+  $LAFiltersDBFile = encode('utf8', $LAFiltersDBFile);
+  my $dsn          = "DBI:SQLite:dbname=$LAFiltersDBFile";
   if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
     # Last entry
     my $nbrLogEntries = $dbh->selectrow_array('SELECT COUNT(id) FROM FILTERS');
@@ -11230,7 +11244,8 @@ sub btnFieldFilterSaveDB_Click
   }
   # Edit row in Log Analysis Filters database
   my $LAFiltersDBFile = $winConfig->tfLAFiltersDB->Text();
-  my $dsn = "DBI:SQLite:dbname=$LAFiltersDBFile";
+  $LAFiltersDBFile    = encode('utf8', $LAFiltersDBFile);
+  my $dsn             = "DBI:SQLite:dbname=$LAFiltersDBFile";
   if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
     # Database: table = FILTERS, Fields = id, field, cond, value, matchcase, regex
     my $sth = $dbh->prepare('UPDATE FILTERS SET field = ?, cond = ?, matchcase = ?, regex = ?, value = ? WHERE id == ?');
@@ -12329,7 +12344,8 @@ sub btnDTObjAdd_Click
     $winConfig->tfDTDB->Text($DTDBFile) if &createDTDB($DTDBFile);
   }
   # Add to database
-  my $dsn = "DBI:SQLite:dbname=$DTDBFile";
+  $DTDBFile = encode('utf8', $DTDBFile);
+  my $dsn   = "DBI:SQLite:dbname=$DTDBFile";
   if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
     # Database: table = DT, Fields = sample, pattern, regex, timezone, use_as, comment
     my $sth = $dbh->prepare("insert into DT (sample,pattern,regex,timezone,use_as,comment) values(?,?,?,?,?,?)");
@@ -12385,7 +12401,8 @@ sub btnDTObjEdit_Click
     $timezone = $winDTObj->cbDTObjTZName->GetString($winDTObj->cbDTObjTZName->GetCurSel());
   } else { $timezone = 'NULL'; }
   # Update database
-  my $dsn = "DBI:SQLite:dbname=$DTDBFile";
+  $DTDBFile = encode('utf8', $DTDBFile);
+  my $dsn   = "DBI:SQLite:dbname=$DTDBFile";
   if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
     # Database: table = DT, Fields = sample, pattern, regex, timezone, use_as, comment
     my $sth = $dbh->prepare("UPDATE DT SET pattern = ?, regex = ?, timezone = ?, use_as = ?, comment = ? WHERE ? == sample");
@@ -12448,7 +12465,8 @@ sub btnDTDel_Click
   my $selRow = ($winDTDB->gridDT->GetSelectedCellRange())[0];
   my $sample = $winDTDB->gridDT->GetCellText($selRow, 0);
   # Delete in Datetime database
-  my $dsn = "DBI:SQLite:dbname=$DTDBFile";
+  $DTDBFile = encode('utf8', $DTDBFile);
+  my $dsn   = "DBI:SQLite:dbname=$DTDBFile";
   if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
     my $sth = $dbh->prepare("DELETE from DT where sample == ?");
     my $rv = $sth->execute($sample);
@@ -12482,8 +12500,9 @@ sub createDTDB
   # Local variables
   my $DTDBFile = shift;
   # Create a new database
-  my $dsn = "DBI:SQLite:dbname=$DTDBFile";
-  my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 }) or return(0);
+  $DTDBFile = encode('utf8', $DTDBFile);
+  my $dsn   = "DBI:SQLite:dbname=$DTDBFile";
+  my $dbh   = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 }) or return(0);
   # Create main table
   my $stmt = qq(CREATE TABLE IF NOT EXISTS DT
                 (sample     VARCHAR(255)  NOT NULL,
@@ -12923,9 +12942,9 @@ sub changePath_Click
   # Selected folder
   if ($dir and -d $dir) {
     chop($dir) if $dir =~ /\\$/;
-    my $dbFile = $win->tfInput->Text();
+    my $dbFile = encode('utf8', $win->tfInput->Text());
     my $dsn    = "DBI:SQLite:dbname=$dbFile";
-    if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
+    if (my $dbh = DBI->connect($dsn, undef, undef, { AutoCommit => 1 })) {
       my $sth = $dbh->prepare("UPDATE FILES SET path = ? WHERE path == ?");
       for (my $row = 1; $row <= $winLACurrDBFiles->gridCurrDBListFiles->GetRows(); $row++) {
         my $currPath = $winLACurrDBFiles->gridCurrDBListFiles->GetCellText($row, 0);
@@ -12960,7 +12979,9 @@ sub changePath_Click
       $winLACurrDBFiles->gridCurrDBListFiles->AutoSizeColumns();
       $winLACurrDBFiles->gridCurrDBListFiles->ExpandColumnsToFit();
       $winLACurrDBFiles->gridCurrDBListFiles->Refresh();
-    } else { Win32::GUI::MessageBox($winLACurrDBFiles, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010); }
+    } else {
+      Win32::GUI::MessageBox($winLACurrDBFiles, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+      }
   }
   return(1);
 
@@ -14511,9 +14532,10 @@ sub btnExprDBImport_Click
                                                 -explorer      => 1                          , );
   if ($exprDBFile and &validExprDB($exprDBFile)) {
     # Load all expressions from the database to import
-    my $dsn = "DBI:SQLite:dbname=$exprDBFile";
-    my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
-              or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+    $exprDBFile = encode('utf8', $exprDBFile);
+    my $dsn     = "DBI:SQLite:dbname=$exprDBFile";
+    my $dbh     = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
+                  or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
     # Check if EXPR_DB table exists
     my $sth;
     eval { $sth = $dbh->table_info(undef, undef, '%', 'TABLE'); };
@@ -14528,9 +14550,10 @@ sub btnExprDBImport_Click
       $dbh->disconnect();
       # Connect to the current database
       my $curExprDBFile = $winConfig->tfExprDB->Text();
-      $dsn = "DBI:SQLite:dbname=$curExprDBFile";
-      $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
-             or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+      $curExprDBFile    = encode('utf8', $curExprDBFile);
+      $dsn              = "DBI:SQLite:dbname=$curExprDBFile";
+      $dbh              = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
+                          or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
       # Database: table = EXPR_DB, Fields = used, matchcase, regex, invert, expr, comment
       my $sth = $dbh->prepare("insert or ignore into EXPR_DB (used, matchcase, regex, invert, expr, comment) values(?,?,?,?,?,?)");
       # Add each expression that don't already exists
@@ -15353,6 +15376,7 @@ sub isProcessReady
             } else { $win->lblLAQueryOk->Show();  $win->lblLAQueryErr->Hide(); } # Query OK
           } else   { $win->lblLAQueryErr->Show(); $win->lblLAQueryOk->Hide();  } # Cannot connect to DB
         } else     { $win->lblLAQueryErr->Show(); $win->lblLAQueryOk->Hide();  } # Query incomplete
+        $win->tfLAQuery->Show();
       }
       # A destination folder is required
       elsif (!$nextStep and !$winReport->tfReportDir->Text()) { $nextStep = $STR{'setDestDir'};  }
@@ -15579,7 +15603,7 @@ sub btnAbout_Click
   # Create the window
   my $winAbout  = Win32::GUI::DialogBox->new( -name        => 'winAbout'                    ,
                                               -parent      => $win                          ,
-                                              -text        => $STR{'about'}.' XL-Parser'    ,
+                                              -text        => $STR{'About'}.' XL-Parser'    ,
                                               -pos         => [$winPosX, $winPosY]          ,
                                               -size        => [520, 170]                    ,
                                               -background  => [255, 255, 255]               ,

@@ -6,8 +6,8 @@
 # SourceForge : https://sourceforge.net/p/xl-parser
 # GitHub      : https://github.com/arioux/XL-Parser
 # Creation    : 2016-07-15
-# Modified    : 2017-08-12
-my $VERSION   = '1.1';
+# Modified    : 2017-09-10
+my $VERSION   = '1.1.1';
 # Author      : Alain Rioux (admin@le-tools.com)
 #
 # Copyright (C) 2016-2017 Alain Rioux (le-tools.com)
@@ -41,6 +41,9 @@ use threads;
 use threads::shared;
 use JSON qw(encode_json decode_json);
 use Time::Local 'timelocal';
+use B::Hooks::EndOfScope::PP::FieldHash;
+use B::Hooks::EndOfScope::PP;
+use Params::Validate::PP;
 use DateTime;
 use DateTime::Format::Duration;
 use DateTime::Format::Strptime;
@@ -57,9 +60,6 @@ use XML::LibXML::Reader;             # If MS Word is not installed (for docx, un
 use Spreadsheet::ParseExcel::Simple; # MS Excel (old format, xls)
 use Spreadsheet::XLSX;               # MS Excel (new format, xlsx)
 use Parse::EventLog;                 # Event logs (old format)
-use Params::Validate::PP;
-use B::Hooks::EndOfScope::PP;
-use B::Hooks::EndOfScope::PP::FieldHash;
 use Win32::EventLog;
 use CAM::PDF;
 use Email::Outlook::Message;         # For Msg
@@ -5291,6 +5291,7 @@ sub loadTLDDB
 {
   # Load TLD Database
   my $dbFile = shift;
+  $dbFile    = encode('utf8', $dbFile);
   my $dsn    = "DBI:SQLite:dbname=$dbFile";
   if (my $dbhTLD = DBI->connect($dsn, undef, undef, { RaiseError => 1 })) { return($dbhTLD); }
   
@@ -5302,6 +5303,7 @@ sub loadXLWhoisDB
 {
   # Load XL-Whois Database
   my $dbFile = shift;
+  $dbFile    = encode('utf8', $dbFile);
   my $dsn    = "DBI:SQLite:dbname=$dbFile";
   if (my $dbhXLWhoisDB = DBI->connect($dsn, undef, undef, { RaiseError => 1 })) { return($dbhXLWhoisDB); }
   
@@ -5323,6 +5325,7 @@ sub loadMACAddrDB
 {
   # Load MAC Address OUI Database
   my $dbFile = shift;
+  $dbFile    = encode('utf8', $dbFile);
   my $dsn    = "DBI:SQLite:dbname=$dbFile";
   if (my $dbhMACAddr = DBI->connect($dsn, undef, undef, { RaiseError => 1 })) { return($dbhMACAddr); }
   
@@ -5496,6 +5499,7 @@ sub loadListIIN
   my $IIN_DB = shift;
   my %listIIN;
   # Load IIN Database
+  $IIN_DB   = encode('utf8', $IIN_DB);
   my $dsn   = "DBI:SQLite:dbname=$IIN_DB";
   my $dbhCC = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 });
   my $all   = $dbhCC->selectall_arrayref('SELECT * FROM IIN');
@@ -9221,7 +9225,8 @@ sub SA_ResIPs_Click
       }
       # Connect to XL-Whois Database
       if ($XLWHOIS_DB_FILE) {
-        my $dsn = "DBI:SQLite:dbname=$XLWHOIS_DB_FILE";
+        $XLWHOIS_DB_FILE = encode('utf8', $XLWHOIS_DB_FILE);
+        my $dsn          = "DBI:SQLite:dbname=$XLWHOIS_DB_FILE";
         $dbhWhoisDB = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 });
       }
       # Connect to GeoIP Database
@@ -9640,7 +9645,8 @@ sub createLADB
           }
           close(CONFIG);
           if ($databaseINFO{filterISP} and $XLWHOIS_DB_FILE) { # Connect to XL-Whois Database
-            my $dsn = "DBI:SQLite:dbname=$XLWHOIS_DB_FILE";
+            $XLWHOIS_DB_FILE = encode('utf8', $XLWHOIS_DB_FILE);
+            my $dsn          = "DBI:SQLite:dbname=$XLWHOIS_DB_FILE";
             $dbhWhoisDB = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 });
           }
           if ($databaseINFO{filterGeoIP} and $GEOIP_DB_FILE) { # Connect to GeoIP Database
@@ -10521,7 +10527,8 @@ sub resISPGeoIP_DB
     close(CONFIG);
     # Connect to XL-Whois Database
     if ($resISP) {
-      my $dsn = "DBI:SQLite:dbname=$XLWHOIS_DB_FILE";
+      $XLWHOIS_DB_FILE = encode('utf8', $XLWHOIS_DB_FILE);
+      my $dsn          = "DBI:SQLite:dbname=$XLWHOIS_DB_FILE";
       if ($dbhWhoisDB = DBI->connect($dsn, undef, undef, { RaiseError => 1 })) {}
       else {
         Win32::GUI::MessageBox($winAdvPb, $STR{'errorConnectDB'} . ' (XL-Whois DB)', $STR{'error'}, 0x40010);

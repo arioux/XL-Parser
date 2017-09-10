@@ -6,7 +6,7 @@
 # SourceForge				: https://sourceforge.net/p/xl-parser
 # GitHub						: https://github.com/arioux/XL-Parser
 # Creation          : 2016-07-15
-# Modified          : 2017-08-12
+# Modified          : 2017-09-10
 # Author            : Alain Rioux (admin@le-tools.com)
 #
 # Copyright (C) 2016-2017 Alain Rioux (le-tools.com)
@@ -686,6 +686,7 @@ sub loadDefaultStr
   $$refSTR{'DTDBNotExist'}    = 'The Datetime database (DT.db) does not exist, download';
   $$refSTR{'updatedDTDB'}     = 'The Datetime database has been updated';
   # About Window
+  $$refSTR{'About'}           = 'About';
   $$refSTR{'Version'}         = 'Version';
   $$refSTR{'Author'}          = 'Author';
   $$refSTR{'TranslatedBy'}    = 'Translated by';

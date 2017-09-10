@@ -6,7 +6,7 @@
 # SourceForge					: https://sourceforge.net/p/xl-parser
 # GitHub							: https://github.com/arioux/XL-Parser
 # Creation						: 2016-07-15
-# Modified						: 2017-08-12
+# Modified						: 2017-09-10
 # Author							: Alain Rioux (admin@le-tools.com)
 #
 # Copyright (C) 2016-2017  Alain Rioux (le-tools.com)
@@ -131,7 +131,8 @@ sub updateExprDBUsed
   }
   # Update in database
   if ($exprExists and -f $exprDBFile) {
-    my $dsn = "DBI:SQLite:dbname=$exprDBFile";
+		$exprDBFile = encode('utf8', $exprDBFile);
+    my $dsn 		= "DBI:SQLite:dbname=$exprDBFile";
     if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
       # Database: table = EXPR_DB, Fields = used, matchcase, regex, invert, expr, comment
       my $sth = $dbh->prepare('UPDATE EXPR_DB SET used = ? WHERE ? == expr');
