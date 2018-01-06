@@ -7,11 +7,11 @@
 # GitHub      : https://github.com/arioux/XL-Parser
 # Description : Part of the XL-Toolkit, XL-Parser provides a bunch of functions for data extraction and analysis.
 # Creation    : 2016-07-15
-# Modified    : 2017-09-10
-my $VERSION   = '1.1.1';
+# Modified    : 2018-01-06
+my $VERSION   = '1.2';
 # Author      : Alain Rioux (admin@le-tools.com)
 #
-# Copyright (C) 2016-2017 Alain Rioux (le-tools.com)
+# Copyright (C) 2016-2018 Alain Rioux (le-tools.com)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -936,15 +936,15 @@ $win->AddButton(      -name         => 'btnLAQueryReset'       ,
                       -text         => $STR{'Reset'}           ,
                       -disabled     => 1                       ,
                       -visible      => 0                       , );
-$win->AddLabel(       -name         => 'lblLAQueryOk'          ,
-                      -size         => [302, 44]               ,
-                      -pos          => [ 89, 449]               ,
-                      -background   => [  0, 255,   0]         ,
+$win->AddButton(      -name         => 'btnLAQueryValid'       ,
+                      -size         => [ 80, 22]               ,
+                      -pos          => [470,453]               ,
+                      -text         => $STR{'Test'}            ,
+                      -disabled     => 1                       ,
                       -visible      => 0                       , );
-$win->AddLabel(       -name         => 'lblLAQueryErr'         ,
-                      -size         => [302, 44]               ,
-                      -pos          => [ 89,449]               ,
-                      -background   => [255,   0,   0]         ,
+$win->AddTextfield(   -name         => 'tfLAQueryValidHidden'  ,
+                      -size         => [300, 42]               ,
+                      -pos          => [ 90,450]               ,
                       -visible      => 0                       , );
 $win->AddTextfield(   -name         => 'tfLAQuery'             ,
                       -size         => [300, 42]               ,
@@ -998,6 +998,16 @@ $win->AddButton(      -name         => 'btnLASearchReset'      ,
                       -text         => $STR{'Reset'}           ,
                       -disabled     => 1                       ,
                       -visible      => 0                       , );
+$win->AddButton(      -name         => 'btnLASearchSave'       ,
+                      -size         => [ 80, 22]               ,
+                      -pos          => [  5,405]               ,
+                      -text         => $STR{'Save'}.'...'      ,
+                      -visible      => 0                       , );
+$win->AddButton(      -name         => 'btnLASearchLoad'       ,
+                      -size         => [ 80, 22]               ,
+                      -pos          => [  5,430]               ,
+                      -text         => $STR{'Load'}.'...'      ,
+                      -visible      => 0                       , );
 $win->AddButton(      -name         => 'btnLASearchReportOpt'  ,
                       -size         => [120, 22]               ,
                       -pos          => [235,350]               ,
@@ -1016,14 +1026,9 @@ $win->AddTextfield(   -name         => 'tfLASearchSAMaxRes'    ,
                       -number       => 1                       ,
                       -text         => 0                       ,
                       -visible      => 0                       , );
-$win->AddButton(      -name         => 'btnLASearchSaveOptions',
-                      -size         => [120, 22]               ,
-                      -pos          => [520,350]               ,
-                      -text         => $STR{'SaveOptions'}     ,
-                      -visible      => 0                       , );
 $win->AddButton(      -name         => 'btnLASearchOpenResults',
                       -size         => [120, 22]               ,
-                      -pos          => [645,350]               ,
+                      -pos          => [520,350]               ,
                       -text         => $STR{'OpenResults'}.'...',
                       -visible      => 0                       , );
 $win->AddLabel(       -name         => 'lblLASearchSAIndShadowT',
@@ -1266,7 +1271,7 @@ my $winReport = Win32::GUI::Window->new(    -name        => 'winReport'         
                                             -parent      => $win                   ,
                                             -text        => $STR{'ReportOpt'}      ,
                                             -pos         => [$winPosX, $winPosY]   ,
-                                            -size        => [680, 230]             ,
+                                            -size        => [680, 240]             ,
                                             -hasmaximize => 0                      ,
                                             -hasminimize => 0                      ,
                                             -resizable   => 0                      ,
@@ -1400,9 +1405,16 @@ $winReport->AddCheckbox(      -name         => 'chReportOptIncWeekday' ,
                               -font         => $font10                 ,
                               -checked      => 0                       ,
                               -tabstop      => 1                       , );
+$winReport->AddButton(        -name         => 'btnReportOptSave'      ,
+                              -size         => [ 80, 30]               ,
+                              -pos          => [$winReport->ScaleWidth()-173,178],
+                              -text         => $STR{'Save'}            ,
+                              -font         => $font10                 ,
+                              -visible      => 1                       ,
+                              -tabstop      => 1                       , );
 $winReport->AddButton(        -name         => 'btnReportOk'           ,
                               -size         => [ 80, 30]               ,
-                              -pos          => [$winReport->ScaleWidth()-88,168],
+                              -pos          => [$winReport->ScaleWidth()-88,178],
                               -text         => $STR{'Ok'}              ,
                               -font         => $font10                 ,
                               -disabled     => 1                       ,
@@ -2306,15 +2318,10 @@ sub winMain_Resize
   $win->btnLAQueryEdit->Top($topSection+137);
   $win->btnLAQuerySave->Top($topSection+137);
   $win->btnLAQueryReset->Top($topSection+137);
+  $win->btnLAQueryValid->Top($topSection+137);
   $win->tfLAQuery->Top($topSection+163);
-  $win->lblLAQueryOk->Top($topSection+162);
-  $win->lblLAQueryErr->Top($topSection+162);
   $win->tfLAQuery->Width($win->ScaleWidth()-95);
   $win->tfLAQuery->Height($win->ScaleHeight()-$win->tfLAQuery->Top()-85);
-  $win->lblLAQueryOk->Width($win->ScaleWidth()-93);
-  $win->lblLAQueryOk->Height($win->ScaleHeight()-$win->tfLAQuery->Top()-83);
-  $win->lblLAQueryErr->Width($win->ScaleWidth()-93);
-  $win->lblLAQueryErr->Height($win->ScaleHeight()-$win->tfLAQuery->Top()-83);
   $win->lblLAQueryOutputShadowT->Top($win->ScaleHeight()-79);
   $win->lblLAQueryOutputT->Top($win->ScaleHeight()-80);
   $win->btnLAQueryReportOpt->Top($win->ScaleHeight()-80);
@@ -2324,11 +2331,12 @@ sub winMain_Resize
   $win->btnLASearchReportOpt->Top($topSection+80);
   $win->lblLASearchSAMaxRes->Top($topSection+83);
   $win->tfLASearchSAMaxRes->Top($topSection+80);
-  $win->btnLASearchSaveOptions->Top($topSection+80);
   $win->btnLASearchOpenResults->Top($topSection+80);
   $win->lblLASearchSAIndShadowT->Top($topSection+108);
   $win->lblLASearchSAIndT->Top($topSection+107);
   $win->btnLASearchReset->Top($topSection+137);
+  $win->btnLASearchSave->Top($topSection+162);
+  $win->btnLASearchLoad->Top($topSection+187);
   $win->gridLASearchSAInd->Top($topSection+107);
   $win->gridLASearchSAInd->Width($win->ScaleWidth()-115);
   $win->gridLASearchSAInd->Height($win->ScaleHeight()-$topSection-162);
@@ -3926,9 +3934,8 @@ sub TabFunctions_Click
     $win->btnLAQueryEdit->Hide();
     $win->btnLAQuerySave->Hide();
     $win->btnLAQueryReset->Hide();
+    $win->btnLAQueryValid->Hide();
     $win->tfLAQuery->Hide();
-    $win->lblLAQueryOk->Hide();
-    $win->lblLAQueryErr->Hide();
     $win->lblLAQueryOutputShadowT->Hide();
     $win->lblLAQueryOutputT->Hide();
     $win->btnLAQueryReportOpt->Hide();
@@ -3937,11 +3944,12 @@ sub TabFunctions_Click
     $win->btnLASearchReportOpt->Hide();
     $win->lblLASearchSAMaxRes->Hide();
     $win->tfLASearchSAMaxRes->Hide();
-    $win->btnLASearchSaveOptions->Hide();
     $win->btnLASearchOpenResults->Hide();
     $win->lblLASearchSAIndShadowT->Hide();
     $win->lblLASearchSAIndT->Hide();
     $win->btnLASearchReset->Hide();
+    $win->btnLASearchSave->Hide();
+    $win->btnLASearchLoad->Hide();
     $win->gridLASearchSAInd->Hide();
     $win->gbCurrDBGeneral->Hide();
     $win->lblCurrDBLastUpdate->Hide();
@@ -4167,9 +4175,8 @@ sub TabFunctions_Click
     $win->btnLAQueryEdit->Hide();
     $win->btnLAQuerySave->Hide();
     $win->btnLAQueryReset->Hide();
+    $win->btnLAQueryValid->Hide();
     $win->tfLAQuery->Hide();
-    $win->lblLAQueryOk->Hide();
-    $win->lblLAQueryErr->Hide();
     $win->lblLAQueryOutputShadowT->Hide();
     $win->lblLAQueryOutputT->Hide();
     $win->btnLAQueryReportOpt->Hide();
@@ -4178,11 +4185,12 @@ sub TabFunctions_Click
     $win->btnLASearchReportOpt->Hide();
     $win->lblLASearchSAMaxRes->Hide();
     $win->tfLASearchSAMaxRes->Hide();
-    $win->btnLASearchSaveOptions->Hide();
     $win->btnLASearchOpenResults->Hide();
     $win->lblLASearchSAIndShadowT->Hide();
     $win->lblLASearchSAIndT->Hide();
     $win->btnLASearchReset->Hide();
+    $win->btnLASearchSave->Hide();
+    $win->btnLASearchLoad->Hide();
     $win->gridLASearchSAInd->Hide();
     $win->gbCurrDBGeneral->Hide();
     $win->lblCurrDBLastUpdate->Hide();
@@ -6715,9 +6723,8 @@ sub LAFunctionsTabUpdate
     $win->btnLAQueryEdit->Hide();
     $win->btnLAQuerySave->Hide();
     $win->btnLAQueryReset->Hide();
+    $win->btnLAQueryValid->Hide();
     $win->tfLAQuery->Hide();
-    $win->lblLAQueryOk->Hide();
-    $win->lblLAQueryErr->Hide();
     $win->lblLAQueryOutputShadowT->Hide();
     $win->lblLAQueryOutputT->Hide();
     $win->btnLAQueryReportOpt->Hide();
@@ -6726,11 +6733,12 @@ sub LAFunctionsTabUpdate
     $win->btnLASearchReportOpt->Hide();
     $win->lblLASearchSAMaxRes->Hide();
     $win->tfLASearchSAMaxRes->Hide();
-    $win->btnLASearchSaveOptions->Hide();
     $win->btnLASearchOpenResults->Hide();
     $win->lblLASearchSAIndShadowT->Hide();
     $win->lblLASearchSAIndT->Hide();
     $win->btnLASearchReset->Hide();
+    $win->btnLASearchSave->Hide();
+    $win->btnLASearchLoad->Hide();
     $win->gridLASearchSAInd->Hide();
   # Update Database controls
   } elsif ($functionStr eq $STR{'updateDB'}) {
@@ -6809,9 +6817,8 @@ sub LAFunctionsTabUpdate
     $win->btnLAQueryEdit->Hide();
     $win->btnLAQuerySave->Hide();
     $win->btnLAQueryReset->Hide();
+    $win->btnLAQueryValid->Hide();
     $win->tfLAQuery->Hide();
-    $win->lblLAQueryOk->Hide();
-    $win->lblLAQueryErr->Hide();
     $win->lblLAQueryOutputShadowT->Hide();
     $win->lblLAQueryOutputT->Hide();
     $win->btnLAQueryReportOpt->Hide();
@@ -6820,11 +6827,12 @@ sub LAFunctionsTabUpdate
     $win->btnLASearchReportOpt->Hide();
     $win->lblLASearchSAMaxRes->Hide();
     $win->tfLASearchSAMaxRes->Hide();
-    $win->btnLASearchSaveOptions->Hide();
     $win->btnLASearchOpenResults->Hide();
     $win->lblLASearchSAIndShadowT->Hide();
     $win->lblLASearchSAIndT->Hide();
     $win->btnLASearchReset->Hide();
+    $win->btnLASearchSave->Hide();
+    $win->btnLASearchLoad->Hide();
     $win->gridLASearchSAInd->Hide();
   # Query
   } elsif ($functionStr eq $STR{'QueryDB'}) {
@@ -6851,7 +6859,7 @@ sub LAFunctionsTabUpdate
     $win->btnLAQueryEdit->Show();
     $win->btnLAQuerySave->Show();
     $win->btnLAQueryReset->Show();
-    $win->tfLAQuery->Show();
+    $win->btnLAQueryValid->Show();
     $win->lblLAQueryOutputShadowT->Show();
     $win->lblLAQueryOutputT->Show();
     $win->btnLAQueryReportOpt->Show();
@@ -6919,12 +6927,13 @@ sub LAFunctionsTabUpdate
     $win->btnLASearchReportOpt->Hide();
     $win->lblLASearchSAMaxRes->Hide();
     $win->tfLASearchSAMaxRes->Hide();
-    $win->btnLASearchSaveOptions->Hide();
     $win->btnLASearchOpenResults->Hide();
     $win->lblLASearchSAIndShadowT->Hide();
     $win->lblLASearchSAIndShadowT->Hide();
     $win->lblLASearchSAIndT->Hide();
     $win->btnLASearchReset->Hide();
+    $win->btnLASearchSave->Hide();
+    $win->btnLASearchLoad->Hide();
     $win->gridLASearchSAInd->Hide();
   # Search suspect activites
   } elsif ($functionStr eq $STR{'SearchSA'}) {
@@ -6935,11 +6944,12 @@ sub LAFunctionsTabUpdate
     $win->btnLASearchReportOpt->Show();
     $win->lblLASearchSAMaxRes->Show();
     $win->tfLASearchSAMaxRes->Show();
-    $win->btnLASearchSaveOptions->Show();
     $win->btnLASearchOpenResults->Show();
     $win->lblLASearchSAIndShadowT->Show();
     $win->lblLASearchSAIndT->Show();
     $win->btnLASearchReset->Show();
+    $win->btnLASearchSave->Show();
+    $win->btnLASearchLoad->Show();
     $win->gridLASearchSAInd->Show();
     &loadSAIndGrid("$USERDIR\\SA_Indicators.json", \$win, \%STR) if $win->gridLASearchSAInd->GetRows() < 2;
     # Reset Select Columns Window
@@ -7024,9 +7034,8 @@ sub LAFunctionsTabUpdate
     $win->btnLAQueryEdit->Hide();
     $win->btnLAQuerySave->Hide();
     $win->btnLAQueryReset->Hide();
+    $win->btnLAQueryValid->Hide();
     $win->tfLAQuery->Hide();
-    $win->lblLAQueryOk->Hide();
-    $win->lblLAQueryErr->Hide();
     $win->lblLAQueryOutputShadowT->Hide();
     $win->lblLAQueryOutputT->Hide();
     $win->btnLAQueryReportOpt->Hide();
@@ -7190,6 +7199,7 @@ sub btnLFAdd_Click
   $winLFObj->tfLFObjSample->ReadOnly(0);
   $winLFObj->tfLFObjPattern->Text('');
   $winLFObj->cbLFObjPattern->SetCurSel(0);
+  &cbLFObjPattern_Change();
   $winLFObj->lblLFObjRegexOk->Hide();
   $winLFObj->lblLFObjRegexErr->Hide();
   $winLFObj->lblLFObjRegexWarn->Hide();
@@ -7245,8 +7255,8 @@ sub createWinLFObj
                                       -parent      => $win                   ,
                                       -text        => $STR{'winLFObj'}       ,
                                       -pos         => [$winPosX, $winPosY]   ,
-                                      -size        => [$winWidth, 450]       ,
-                                      -minsize     => [$winWidth, 450]       ,
+                                      -size        => [$winWidth, 480]       ,
+                                      -minsize     => [$winWidth, 480]       ,
                                       -hasmaximize => 1                      ,
                                       -hasminimize => 1                      ,
                                       -resizable   => 1                      ,
@@ -7334,14 +7344,6 @@ sub createWinLFObj
                                 -tip          => $STR{'guessFormat'}     ,
                                 -visible      => 0                       ,
                                 -tabstop      => 1                       , );
-  $winLFObj->AddCheckbox(       -name         => 'chLFObjHasSpaces'      ,
-                                -size         => [200, 22]               ,
-                                -pos          => [250, 68]               ,
-                                -text         => $STR{'chLFObjHasSpaces'},
-                                -background   => [255, 255, 255]         ,
-                                -font         => $font10                 ,
-                                -checked      => 0                       ,
-                                -visible      => 0                       , );
   $winLFObj->AddLabel(          -name         => 'lblLFObjPattern'       ,
                                 -size         => [ 95, 24]               ,
                                 -pos          => [  5, 98]               ,
@@ -7353,48 +7355,56 @@ sub createWinLFObj
                                 -pos          => [100, 95]               ,
                                 -tabstop      => 1                       ,
                                 -disabled     => 1                       , );
+  $winLFObj->AddCheckbox(       -name         => 'chLFObjHasSpaces'      ,
+                                -size         => [350, 22]               ,
+                                -pos          => [100,125]               ,
+                                -text         => $STR{'chLFObjHasSpaces'},
+                                -background   => [255, 255, 255]         ,
+                                -font         => $font10                 ,
+                                -checked      => 0                       ,
+                                -disabled     => 1                       , );
   $winLFObj->AddLabel(          -name         => 'lblLFObjRegex'         ,
                                 -size         => [ 95, 24]               ,
-                                -pos          => [  5,128]               ,
+                                -pos          => [  5,158]               ,
                                 -background   => [255, 255, 255]         ,
                                 -text         => $STR{'Regex'}.':'       ,
                                 -font         => $font10                 , );
   $winLFObj->AddLabel(          -name         => 'lblLFObjRegexOk'       ,
                                 -size         => [287, 26]               ,
-                                -pos          => [ 99,124]               ,
+                                -pos          => [ 99,154]               ,
                                 -background   => [  0, 255,   0]         ,
                                 -visible      => 0                       , );
   $winLFObj->AddLabel(          -name         => 'lblLFObjRegexErr'      ,
                                 -size         => [287, 26]               ,
-                                -pos          => [ 99,124]               ,
+                                -pos          => [ 99,154]               ,
                                 -background   => [255,   0,   0]         ,
                                 -visible      => 0                       , );
   $winLFObj->AddLabel(          -name         => 'lblLFObjRegexWarn'     ,
                                 -size         => [287, 26]               ,
-                                -pos          => [ 99,124]               ,
+                                -pos          => [ 99,154]               ,
                                 -background   => [255, 255,   0]         ,
                                 -visible      => 0                       , );
   $winLFObj->AddTextfield(      -name         => 'tfLFObjRegex'          ,
                                 -size         => [285, 24]               ,
-                                -pos          => [100,125]               ,
+                                -pos          => [100,155]               ,
                                 -tabstop      => 1                       ,
                                 -disabled     => 1                       , );
   $winLFObj->AddCheckbox(       -name         => 'chLFObjRegexAuto'      ,
                                 -size         => [150, 22]               ,
-                                -pos          => [390,125]               ,
+                                -pos          => [390,155]               ,
                                 -text         => $STR{'matchPattern'}    ,
                                 -background   => [255, 255, 255]         ,
                                 -font         => $font10                 ,
                                 -checked      => 1                       , );
   $winLFObj->AddLabel(          -name         => 'lblLFObjParsed'        ,
                                 -size         => [ 95, 22]               ,
-                                -pos          => [  5,158]               ,
+                                -pos          => [  5,188]               ,
                                 -background   => [255, 255, 255]         ,
                                 -text         => $STR{'parsed'}.':'      ,
                                 -font         => $font10                 , );
   $winLFObj->AddGrid(           -name         => 'gridLFObjParsedData'   ,
                                 -size         => [550,375]               ,
-                                -pos          => [100,156]               ,
+                                -pos          => [100,186]               ,
                                 -background   => [255, 255, 255]         ,
                                 -columns      => 2                       ,
                                 -fixedrows    => 1                       ,
@@ -7404,26 +7414,26 @@ sub createWinLFObj
   $winLFObj->gridLFObjParsedData->SetCellText(0, 1, $STR{'Value'});
   $winLFObj->AddButton(         -name         => 'btnLFObjNotReady'      ,
                                 -size         => [ 30, 30]               ,
-                                -pos          => [255,250]               ,
+                                -pos          => [255,280]               ,
                                 -text         => '?'                     ,
                                 -font         => $font10                 , );
   $winLFObj->AddButton(         -name         => 'btnLFObjAdd'           ,
                                 -size         => [ 60, 30]               ,
-                                -pos          => [295,250]               ,
+                                -pos          => [295,280]               ,
                                 -text         => $STR{'add'}             ,
                                 -font         => $font10                 ,
                                 -disabled     => 1                       ,
                                 -visible      => 0                       , );
   $winLFObj->AddButton(         -name         => 'btnLFObjEdit'          ,
                                 -size         => [ 60, 30]               ,
-                                -pos          => [295,250]               ,
+                                -pos          => [295,280]               ,
                                 -text         => $STR{'Edit'}            ,
                                 -font         => $font10                 ,
                                 -disabled     => 1                       ,
                                 -visible      => 0                       , );
   $winLFObj->AddButton(         -name         => 'btnLFObjCancel'        ,
                                 -size         => [ 70, 30]               ,
-                                -pos          => [360,250]               ,
+                                -pos          => [360,280]               ,
                                 -text         => $STR{'cancel'}          ,
                                 -font         => $font10                 , );
 
@@ -7444,7 +7454,7 @@ sub winLFObj_Resize
   $winLFObj->tfLFObjRegex->Width($winLFObj->ScaleWidth()-254);
   $winLFObj->chLFObjRegexAuto->Left($winLFObj->ScaleWidth()-150);
   $winLFObj->gridLFObjParsedData->Width($winLFObj->ScaleWidth()-254);
-  $winLFObj->gridLFObjParsedData->Height($winLFObj->ScaleHeight()-195);
+  $winLFObj->gridLFObjParsedData->Height($winLFObj->ScaleHeight()-225);
   $winLFObj->gridLFObjParsedData->AutoSizeColumns();
   $winLFObj->gridLFObjParsedData->ExpandLastColumn();
   $winLFObj->gridLFObjParsedData->Refresh();
@@ -7460,8 +7470,8 @@ sub winLFObj_Resize
 }  #--- End winLFObj_Resize
 
 #--------------------------#
-sub tfLFObjName_Change   { &isLFObjReady(0); }
-sub tfLFObjSample_Change { &isLFObjReady(0); }
+sub tfLFObjName_Change     { &isLFObjReady(0); }
+sub tfLFObjSample_Change   { &isLFObjReady(0); }
 #--------------------------#
 
 #--------------------------#
@@ -7505,9 +7515,10 @@ sub btnLFPatternFromIISLog_Click
             if ($field eq 'datetime') {
               # Get the date format
               my $oneLine = $winLFObj->tfLFObjSample->Text();
-              if (my $sample = (&findDTFormatInLog($oneLine))) {
-                $sample =~ s/ /%20/g;
-                $patternStr .= $fieldPattern{$field}.'('.$sample.') ';
+              my ($status, $DTName, @listMatches) = &findDTFormatInLog($oneLine, 1);
+              if ($status) {
+                $DTName =~ s/ /%20/g;
+                $patternStr .= $fieldPattern{$field}.'('.$DTName.') ';
               # If date not found
               } else { Win32::GUI::MessageBox($winLFObj, "STR{'Date'} $STR{'formatNotFound'}...", $STR{'error'}, 0x40010); return(1); }
             } else { $patternStr .= $fieldPattern{$field} . ' '; }
@@ -7545,7 +7556,7 @@ sub btnLFObjPatternInsert_Click
       $winLFObj->tfLFObjPattern->Append($LFObjPatternStr[$LFObjPattern]."($DTFormatSample)");
     }
   # May contain spaces
-  } elsif (($LFObjPattern == 8 or $LFObjPattern == 9) and $winLFObj->chLFObjHasSpaces->Checked()) {
+  } elsif ($winLFObj->chLFObjHasSpaces->Checked()) {
     $winLFObj->tfLFObjPattern->Append('"'.$LFObjPatternStr[$LFObjPattern].'-s"');
   } else { $winLFObj->tfLFObjPattern->Append($LFObjPatternStr[$LFObjPattern].''); }
   &isLFObjReady(0);
@@ -7572,9 +7583,6 @@ sub cbLFObjPattern_Change
     $winLFObj->btnLFObjDTDB->Hide();
     $winLFObj->btnLFObjDTGuess->Hide();
   }
-  # Referer and useragent options
-  if ($LFObjPattern == 8 or $LFObjPattern == 9) { $winLFObj->chLFObjHasSpaces->Show(); }
-  else                                          { $winLFObj->chLFObjHasSpaces->Hide(); }
 
 }  #--- End cbLFObjPattern_Change
 
@@ -7596,53 +7604,71 @@ sub btnLFObjDTDB_Click
 }  #--- End btnLFObjDTDB_Click
 
 #--------------------------#
+sub chLFObjHasSpaces_Click
+#--------------------------#
+{
+  # Local variables
+  my $LFPattern = $winLFObj->tfLFObjPattern->Text();
+  if ($winLFObj->chLFObjHasSpaces->Checked()) {
+    $LFPattern =~ s/useragent/"useragent-s"/ if $LFPattern !~ /"useragent-s"/;
+    $LFPattern =~ s/referer/"referer-s"/     if $LFPattern !~ /"referer-s"/;
+  } else {
+    $LFPattern =~ s/"useragent-s"/useragent/ if $LFPattern =~ /"useragent-s"/;
+    $LFPattern =~ s/"referer-s"/referer/     if $LFPattern =~ /"referer-s"/;
+  }
+  $winLFObj->tfLFObjPattern->Text($LFPattern);
+  &tfLFObjPattern_Change();
+  
+}  #--- End chLFObjHasSpaces_Click
+
+#--------------------------#
 sub createWinDTDB
 #--------------------------#
 {
   my $load = shift;
   # Datetime database window
-  $winDTDB = Win32::GUI::Window->new( -name        => 'winDTDB'              ,
-                                      -background  => [255, 255, 255]        ,
-                                      -parent      => $win                   ,
-                                      -text        => $STR{'winDTDB'}        ,
-                                      -pos         => [$winPosX, $winPosY]   ,
-                                      -size        => [$winWidth, 350]       ,
-                                      -minsize     => [$winWidth, 350]       ,
-                                      -hasmaximize => 1                      ,
-                                      -hasminimize => 1                      ,
-                                      -resizable   => 1                      ,
-                                      -dialogui    => 1                      , );
+  $winDTDB = Win32::GUI::Window->new( -name        => 'winDTDB'             ,
+                                      -background  => [255, 255, 255]       ,
+                                      -parent      => $win                  ,
+                                      -text        => $STR{'winDTDB'}       ,
+                                      -pos         => [$winPosX, $winPosY]  ,
+                                      -size        => [$winWidth, 350]      ,
+                                      -minsize     => [$winWidth, 350]      ,
+                                      -hasmaximize => 1                     ,
+                                      -hasminimize => 1                     ,
+                                      -resizable   => 1                     ,
+                                      -dialogui    => 1                     , );
   $winDTDB->SetIcon($winICO);
   # Datetime grid
-  $winDTDB->AddGrid(        -name         => 'gridDT'                ,
-                            -size         => [880,180]               ,
-                            -pos          => [  5,  5]               ,
-                            -background   => [255, 255, 255]         ,
-                            -columns      => 6                       ,
-                            -fixedrows    => 1                       ,
-                            -fixedcolumns => 0                       ,
-                            -editable     => 0                       , );
+  $winDTDB->AddGrid(        -name         => 'gridDT'         ,
+                            -size         => [880,180]        ,
+                            -pos          => [  5,  5]        ,
+                            -background   => [255, 255, 255]  ,
+                            -columns      => 6                ,
+                            -fixedrows    => 1                ,
+                            -fixedcolumns => 0                ,
+                            -editable     => 0                , );
   $winDTDB->gridDT->SetListMode(1);
-  $winDTDB->AddButton(      -name         => 'btnDTAdd'              ,
-                            -size         => [ 30, 30]               ,
-                            -pos          => [887,  5]               ,
-                            -bitmap       => $datetimeAdd            ,
-                            -tip          => $STR{'btnDTAdd'}        ,
-                            -tabstop      => 1                       , );
-  $winDTDB->AddButton(      -name         => 'btnDTEdit'             ,
-                            -size         => [ 30, 30]               ,
-                            -pos          => [887, 37]               ,
-                            -bitmap       => $datetimeEdit           ,
-                            -tip          => $STR{'btnDTEdit'}       ,
-                            -disabled     => 1                       ,
-                            -tabstop      => 1                       , );
-  $winDTDB->AddButton(      -name         => 'btnDTDel'              ,
-                            -size         => [ 30, 30]               ,
-                            -pos          => [887, 69]               ,
-                            -bitmap       => $datetimeDel            ,
-                            -tip          => $STR{'btnDTDel'}        ,
-                            -disabled     => 1                       ,
-                            -tabstop      => 1                       , );
+  $winDTDB->AddButton(      -name         => 'btnDTAdd'       ,
+                            -size         => [ 30, 30]        ,
+                            -pos          => [887,  5]        ,
+                            -bitmap       => $datetimeAdd     ,
+                            -tip          => $STR{'btnDTAdd'} ,
+                            -tabstop      => 1                , );
+  $winDTDB->AddButton(      -name         => 'btnDTEdit'      ,
+                            -size         => [ 30, 30]        ,
+                            -pos          => [887, 37]        ,
+                            -bitmap       => $datetimeEdit    ,
+                            -tip          => $STR{'btnDTEdit'},
+                            -disabled     => 1                ,
+                            -tabstop      => 1                , );
+  $winDTDB->AddButton(      -name         => 'btnDTDel'       ,
+                            -size         => [ 30, 30]        ,
+                            -pos          => [887, 69]        ,
+                            -bitmap       => $datetimeDel     ,
+                            -tip          => $STR{'btnDTDel'} ,
+                            -disabled     => 1                ,
+                            -tabstop      => 1                , );
   # Set Datetime grid header
   $winDTDB->gridDT->SetCellText(0, 0, $STR{'sample'}  );
   $winDTDB->gridDT->SetCellText(0, 1, $STR{'pattern'} );
@@ -7687,10 +7713,16 @@ sub btnLFObjDTGuess_Click
 {
   # Guess format of the first item
   my $oneLine = $winLFObj->tfLFObjSample->Text();
-  if (my $sample = (&findDTFormatInLog($oneLine))) {
-    $winLFObj->cbLFObjDT->SetCurSel($winLFObj->cbLFObjDT->FindStringExact($sample));
-  # If not found
-  } else { Win32::GUI::MessageBox($winLFObj, $STR{'formatNotFound'}.'...', $STR{'error'}, 0x40010); }
+  my ($status, $DTName, @listMatches) = &findDTFormatInLog($oneLine, 0);
+  if ($status) {
+    $winLFObj->cbLFObjDT->SetCurSel($winLFObj->cbLFObjDT->FindStringExact($DTName)); # Select format that match
+    if ($status == 2) { # More than one match
+      my $msg = $STR{'moreFormatMatch'};
+      foreach (@listMatches) { $msg .= "\r\n- $_"; }
+      Win32::GUI::MessageBox($winLFObj, $msg, $STR{'warning'}, 0x40030);
+    }
+  } else { Win32::GUI::MessageBox($winLFObj, $STR{'formatNotFound'}.'...', $STR{'error'}, 0x40010); } # If not found
+  return(1);
 
 }  #--- End btnLFObjDTGuess_Click
 
@@ -7731,10 +7763,15 @@ sub patternLFRE
       }
       elsif ($pattern =~ /remoteIP/) { $regex .= '((?:\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|[a-fA-F0-9]\:|\:[a-fA-F0-9]))'; } # RemoteIP (IPv4 or IPv6)
       elsif ($pattern =~ /http_status/ or
-             $pattern =~ /size/    ) { $regex .= '(\d+)';      } # Field is a number
-      elsif ($pattern =~ /-s\"$/   ) { $regex .= '([^\"]+)';   } # Field may contains spaces
-      elsif ($pattern =~ /other/   ) { $regex .= '[^\ \"]+';   } # Pattern we don't need to extract
-      else                           { $regex .= '([^\ \"]+)'; } # Any other pattern
+             $pattern =~ /size/    ) { $regex .= '(\d+)';    } # Field is a number
+      elsif ($pattern =~ /-s\"$/   ) { $regex .= '([^\"]+)'; } # Field may contains spaces
+      elsif ($pattern =~ /other/   ) {                         # Pattern we don't need to extract
+        if ($winLFObj->chLFObjHasSpaces->Checked()) { $regex .= '[^\ \"]+'; }
+        else                                        { $regex .= '[^\ ]+';   }
+      } else {                                                 # Any other pattern
+        if ($winLFObj->chLFObjHasSpaces->Checked()) { $regex .= '([^\ \"]+)'; }
+        else                                        { $regex .= '([^\ ]+)';   }
+       }
       $regex .= "\\".$1 if $pattern =~ /([\"\]])$/;  # " or ]
     } else { $regex .= $pattern; }
   }
@@ -7775,23 +7812,27 @@ sub isLFObjReady
     $winLFObj->tfLFObjPattern->Disable();
     $winLFObj->btnLFObjPatternInsert->Disable();
     $winLFObj->cbLFObjPattern->Disable();
+    $winLFObj->chLFObjHasSpaces->Disable();
     $winLFObj->tfLFObjRegex->Disable();
     $nextStep = $STR{'provideLFName'};
   } else {
     $winLFObj->tfLFObjPattern->Enable();
     $winLFObj->btnLFObjPatternInsert->Enable();
     $winLFObj->cbLFObjPattern->Enable();
+    $winLFObj->chLFObjHasSpaces->Enable();
     # Sample provided ?
     my $sample = $winLFObj->tfLFObjSample->Text();
     if (!$sample) {
       $winLFObj->tfLFObjPattern->Disable();
       $winLFObj->btnLFObjPatternInsert->Disable();
       $winLFObj->cbLFObjPattern->Disable();
+      $winLFObj->chLFObjHasSpaces->Disable();
       $winLFObj->tfLFObjRegex->Disable();
       $nextStep = $STR{'provideSample'};
     } else {
       $winLFObj->tfLFObjPattern->Enable();
       $winLFObj->btnLFObjPatternInsert->Enable();
+      $winLFObj->cbLFObjPattern->Enable();
       $winLFObj->cbLFObjPattern->Enable();
       # Pattern provided ?
       my $pattern = $winLFObj->tfLFObjPattern->Text();
@@ -8060,7 +8101,7 @@ sub btnLFGuess_Click
 #--------------------------#
 {
   # Guess format of the first item
-  my ($status,$LFName, @listMatches) = &findLFFormatInLog(0, \$winLFDB, \$win);
+  my ($status, $LFName, @listMatches) = &findLFFormatInLog(0, \$winLFDB, \$win);
   if ($status) {
     $win->cbLF->SetCurSel($win->cbLF->FindStringExact($LFName)); # Select format that match
     if ($status == 2) { # More than one match
@@ -8090,6 +8131,7 @@ sub btnLAFileOrder_Click
         my $filename  = pop(@parts);
         my @stats     = stat($file);
         my $lastModif = DateTime->from_epoch(epoch => $stats[9]);
+        $lastModif->set_time_zone($winConfig->cbLocalTZ->GetString($CONFIG{'LOCAL_TIMEZONE'}));
         if (my $row = $winFO->gridFO->InsertRow('-', -1)) {
           $winFO->gridFO->SetCellText($row, 0, $filename);
           $winFO->gridFO->SetCellText($row, 1, $stats[7]);
@@ -8776,7 +8818,7 @@ sub btnLAQueryGroupByAdd_Click
 #--------------------------#
 {
   # Local variables
-  my @colNames = ('remoteIP', 'datetimeInt', 'timeOfDay', 'weekday', 'http_method', 'http_request', 'http_params',
+  my @colNames = ('remoteIP', 'datetimeInt', 'weekday', 'http_method', 'http_request', 'http_params',
                   'http_protocol', 'http_status', 'size', 'referer', 'useragent');
   my $selCol   = $win->cbLAQueryGroupByCol->GetCurSel();
   my $SQLQuery = $win->tfLAQuery->Text();
@@ -8801,6 +8843,7 @@ sub btnLAQueryGroupByAdd_Click
   $win->chLAQueryGroupBy->Checked(0);
   $win->cbLAQueryGroupByCol->Disable();
   $win->btnLAQueryGroupByAdd->Disable();
+  &tfLAQuery_Change();
 
 }  #--- End btnLAQueryGroupByAdd_Click
 
@@ -8853,6 +8896,7 @@ sub btnLAQueryOrderByAdd_Click
   $win->cbLAQueryOrderByCol->Disable();
   $win->cbLAQueryOrderBy->Disable();
   $win->btnLAQueryOrderByAdd->Disable();
+  &tfLAQuery_Change();
 
 }  #--- End btnLAQueryOrderByAdd_Click
 
@@ -8905,6 +8949,7 @@ sub btnLAQueryHavingCountAdd_Click
     $win->cbLAQueryHavingCountCol->Disable();
     $win->cbLAQueryHavingCount->Disable();
     $win->btnLAQueryHavingCountAdd->Disable();
+    &tfLAQuery_Change();
   }
 
 }  #--- End btnLAQueryHavingCountAdd_Click
@@ -9174,6 +9219,43 @@ sub btnLAQueryReset_Click
 }   #--- End btnLAQueryReset_Click
 
 #--------------------------#
+sub btnLAQueryValid_Click
+#--------------------------#
+{
+  # A SQL Query must be set or selected
+  if    (!$win->tfLAQuery->Text()) { $win->tfLAQueryValidHidden->Text(''); }
+  # Test query
+  if (my $query = $win->tfLAQuery->Text() and my $dbFile = $win->tfInput->Text()) {
+    my $err;
+    if ($query =~ /SELECT/ and $query =~ /FROM/) {
+      $dbFile = encode('utf8', $dbFile);
+      my $dsn = "DBI:SQLite:dbname=$dbFile";
+      if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, PrintError => 0, PrintWarn  => 1 })) {
+        eval    { my $sth = $dbh->prepare($query); };
+        if ($@) { # Error in query
+          $win->tfLAQueryValidHidden->Text(2);
+          $err = $STR{'errQuery'} . ': ' . (split(/ at /, $@))[0];
+        } else {
+          $win->tfLAQueryValidHidden->Text(1);
+          Win32::GUI::MessageBox($win, "$STR{'validQuery'}!", "$STR{'Test'} $STR{'Query'}", 0x40040);
+          } # Query OK
+      } else {
+        $win->tfLAQueryValidHidden->Text(2);
+        Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}, "$STR{'Test'} $STR{'Query'}", 0x40010);
+        } # Cannot connect to DB
+    } else {
+      $win->tfLAQueryValidHidden->Text(2);
+      Win32::GUI::MessageBox($win, $STR{'errQuery'}, "$STR{'Test'} $STR{'Query'}", 0x40010);
+    } # Query incomplete
+  }
+  $win->tfLAQuery->Show();
+  $win->btnLAQueryValid->Disable();
+  &isProcessReady(0);
+  return(1);
+  
+}   #--- End btnLAQueryValid_Click
+
+#--------------------------#
 sub createWinSaveQuery
 #--------------------------#
 {
@@ -9437,6 +9519,8 @@ sub tfLAQuery_Change
     $win->chLAQueryHavingCount->Enable();
     $win->btnLAQueryReset->Enable();
     $win->btnLAQuerySave->Enable();
+    $win->btnLAQueryValid->Enable();
+    $win->tfLAQueryValidHidden->Text('');
   } else {
     $win->btnLAQueryFilter->Disable();
     $win->chLAQueryGroupBy->Disable();
@@ -9444,6 +9528,7 @@ sub tfLAQuery_Change
     $win->chLAQueryHavingCount->Disable();
     $win->btnLAQueryReset->Disable();
     $win->btnLAQuerySave->Disable();
+    $win->btnLAQueryValid->Disable();
   }
   &isProcessReady(0);
   return(1);
@@ -9457,6 +9542,7 @@ sub btnLAQueryReportOpt_Click
   # Show window
   if ($winReport->tfReportDir->Text()) { $winReport->btnReportOk->Enable();  }
   else                                 { $winReport->btnReportOk->Disable(); }
+  $winReport->btnReportOptSave->Hide();
   $winReport->Center($win);
   $winReport->Show();
   $win->Disable();
@@ -9470,6 +9556,7 @@ sub btnLASearchReportOpt_Click
   # Show window
   if ($winReport->tfReportDir->Text()) { $winReport->btnReportOk->Enable();  }
   else                                 { $winReport->btnReportOk->Disable(); }
+  $winReport->btnReportOptSave->Show();
   $winReport->Center($win);
   $winReport->Show();
   $win->Disable();
@@ -9527,7 +9614,7 @@ sub gridLASearchSAInd_EndEdit
 }  #--- End gridLASearchSAInd_EndEdit
 
 #--------------------------#
-sub btnLASearchSaveOptions_Click
+sub btnReportOptSave_Click
 #--------------------------#
 {
   # Local variables
@@ -9606,12 +9693,12 @@ sub btnLASearchSaveOptions_Click
     if (open(my $json, '>:encoding(cp1252)', "$destDir\\CurrentSearchParams-" . $currSearchID .'.json')) {
       print $json $jsonText;
       close($json);
-      Win32::GUI::MessageBox($win, $STR{'SavedOptions'}, "XL-Parser $VERSION", 0x40040);
+      Win32::GUI::MessageBox($winReport, $STR{'SavedOptions'}, "XL-Parser $VERSION", 0x40040);
     }
   }
   return(1);
   
-}  #--- End btnLASearchSaveOptions_Click
+}  #--- End btnReportOptSave_Click
 
 #--------------------------#
 sub btnLASearchOpenResults_Click
@@ -9693,6 +9780,57 @@ sub btnLASearchReset_Click
   $win->btnLASearchReset->Disable();
 
 }  #--- End btnLASearchReset_Click
+
+#--------------------------#
+sub btnLASearchSave_Click
+#--------------------------#
+{
+  # Ask for a file
+  my $file = Win32::GUI::GetSaveFileName( -owner    => $win                       ,
+                                          -title    => $STR{'selFile'}.':'        ,
+                                          -file     => "SA_Indicators.json"       ,
+                                          -filter   => ['JSON (*.json)', '*.json'],
+                                          -explorer => 1                          , );
+  if ($file) {
+    $file .= '.json' if $file !~ /\.json$/;
+    # Gather all indicator values
+    my %indicators;
+    # Selected row values
+    for (my $i = 1; $i <= $win->gridLASearchSAInd->GetRows(); $i++) {
+      $indicators{$i}{name}    = $win->gridLASearchSAInd->GetCellText($i, 1);
+      $indicators{$i}{score}   = $win->gridLASearchSAInd->GetCellText($i, 2);
+      $indicators{$i}{limit}   = $win->gridLASearchSAInd->GetCellText($i, 3);
+      $indicators{$i}{options} = $win->gridLASearchSAInd->GetCellText($i, 4);
+    }
+    # Save indicators in JSON file
+    my $jsonObj = JSON->new;
+    my $jsonText = $jsonObj->encode(\%indicators);
+    if (open(my $json, '>:encoding(cp1252)', $file)) {
+      print $json $jsonText;
+      close($json);
+      $win->btnLASearchReset->Enable();
+    } else { Win32::GUI::MessageBox($win, "$STR{'errorWriting'} $file", $STR{'errorWriting'}, 0x40010); }
+  }
+  return(1);
+
+}  #--- End btnLASearchSave_Click
+
+#--------------------------#
+sub btnLASearchLoad_Click
+#--------------------------#
+{
+  # Ask for a file
+  my $file = Win32::GUI::GetOpenFileName( -owner         => $win                       ,
+                                          -title         => $STR{'selFile'}.':'        ,
+                                          -filter        => ['JSON (*.json)', '*.json'],
+                                          -filemustexist => 1                          ,
+                                          -explorer      => 1                          , );
+  if ($file and -T $file) {
+    $win->gridLASearchSAInd->DeleteNonFixedRows();
+    &loadSAIndGrid($file, \$win, \%STR) if $win->gridLASearchSAInd->GetRows() < 2;
+  }
+
+}  #--- End btnLASearchLoad_Click
 
 #--------------------------#
 sub cbOutputDTFormat_Change
@@ -11582,11 +11720,16 @@ sub btnSplitTimeFormatGuess_Click
 #--------------------------#
 {
   # Guess format of the first item
-  if (my $sample = (&findDTFormatInLog(0))) {
-    $win->cbSplitTimeFormat->SetCurSel($win->cbSplitTimeFormat->FindStringExact($sample));
-    &isProcessReady(0);
-  # If not found
-  } else { Win32::GUI::MessageBox($win, $STR{'formatNotFound'}.'...', $STR{'error'}, 0x40010); }
+  my ($status, $DTName, @listMatches) = &findDTFormatInLog(0, 0);
+  if ($status) {
+    $win->cbSplitTimeFormat->SetCurSel($win->cbSplitTimeFormat->FindStringExact($DTName)); # Select format that match
+    if ($status == 2) { # More than one match
+      my $msg = $STR{'moreFormatMatch'};
+      foreach (@listMatches) { $msg .= "\r\n- $_"; }
+      Win32::GUI::MessageBox($win, $msg, $STR{'warning'}, 0x40030);
+    }
+  } else { Win32::GUI::MessageBox($win, $STR{'formatNotFound'}.'...', $STR{'error'}, 0x40010); } # If not found
+  &isProcessReady(0);
 
 }  #--- End btnSplitTimeFormatGuess_Click
 
@@ -11633,7 +11776,7 @@ sub findDTFormatInLog
 #--------------------------#
 {
   # Local variables
-  my $firstLine = shift;
+  my ($firstLine, $IISFlag) = @_;
   # Get first line of one file in input
   if (!$firstLine and ($win->rbInputDir->Checked() or $win->rbInputFiles->Checked())) {
     my $oneFile = &getOneFile;
@@ -11644,18 +11787,40 @@ sub findDTFormatInLog
   }
   # Compare with all input format
   if ($firstLine) {
+    my $bestDTName;
+    my $DTRegexLength = 0;
+    my $match         = 0;
+    my @listMatches;
     for (my $i = 1; $i < $winDTDB->gridDT->GetRows(); $i++) {
       my $regex = $winDTDB->gridDT->GetCellText($i, 2);
-      if ($firstLine =~ /($regex)/i) {
-        my $pattern = $winDTDB->gridDT->GetCellText($i, 1);
+      if (($winDTDB->gridDT->GetCellText($i, 4) eq $STR{'Input'} or $winDTDB->gridDT->GetCellText($i, 4) eq $STR{'both'}) and
+          $firstLine =~ /($regex)/i) {
+        my $pattern  = $winDTDB->gridDT->GetCellText($i, 1);
+        my $timezone = $winDTDB->gridDT->GetCellText($i, 3);
         # Format
         my $partItem = $1 =~ s/ +/ /gr;
         my $strp = DateTime::Format::Strptime->new(pattern => $pattern, zone_map => \%ZONE_MAP);
-        return($winDTDB->gridDT->GetCellText($i, 0)) if $strp->parse_datetime($partItem);
+        if (my $dt = $strp->parse_datetime($partItem)) {
+          my $DTName = $winDTDB->gridDT->GetCellText($i, 0);
+          push(@listMatches, $DTName);
+          $match++;
+          # IIS best match
+          # Default IIS datetime format is %F %T in UTC
+          if ($IISFlag and $timezone eq $STR{'UTC'} and $pattern eq '%F %T') {
+            return(1, $DTName, undef);
+          # Other
+          } elsif (length($regex) > $DTRegexLength) { # Keep the longest regex
+            $bestDTName    = $DTName;
+            $DTRegexLength = length($regex);
+          }
+        }
       }
     }
+    return(1, $bestDTName, undef) if $bestDTName and $match == 1;
+    return(2, $bestDTName, @listMatches) if $match > 1;
+    return(0, undef, undef);
   }
-  return(0);
+  return(0, undef, undef);
   
 }  #--- End findDTFormatInLog
 
@@ -12170,7 +12335,7 @@ sub patternDTRE
                   '%w' => '[0-6]', # weekday (Sunday as the first day of the week) as a decimal number (0-6).
                   '%Y' => '\d{4}', # year with century as a decimal number
                   '%y' => '\d{2}', # year without century as a decimal number (00-99)
-                  '%Z' => '[\w\/]+', # time zone name
+                  '%Z' => '[a-zA-Z\/]+', # time zone name
                   '%z' => '[\-\+]?\d{4}', # time zone offset from UTC
                   );
   # Convert other format string from strftime format (%) to regex
@@ -12718,6 +12883,7 @@ sub btnDestDir_Click
   # Selected folder
   if ($dir) {
     # Valid database
+    $dir .= '.db' if $dir !~ /.db$/;
     if    ($win->rbLAUpdateDB->Checked() or ($LAFunctionStr eq $STR{'updateDB'} and $win->rbDestDBCurr->Checked()) and
            &validLADB($dir)) { $win->tfDestDir->Text($dir); }
     elsif ($win->rbLACreateDB->Checked() or ($LAFunctionStr eq $STR{'updateDB'} and $win->rbDestDBNew->Checked())) {
@@ -15355,31 +15521,14 @@ sub isProcessReady
       $nextStep = $STR{'selectDBFile'} if !$nextStep and $win->rbDestDBNew->Checked() and !$win->tfDestDir->Text();
     # Query Database
     } elsif ($LAFunctionStr eq $STR{'QueryDB'}) {
-      # A SQL Query must be set or selected
-      if    (!$nextStep and !$win->tfLAQuery->Text()) {
-        $nextStep = $STR{'setSQLQuery'};
-        $win->lblLAQueryErr->Hide();
-        $win->lblLAQueryOk->Hide();
-      }
-      # Test query
-      if (!$nextStep and my $query = $win->tfLAQuery->Text() and my $dbFile = $win->tfInput->Text()) {
-        if ($query =~ /SELECT/ and $query =~ /FROM/) {
-          $dbFile = encode('utf8', $dbFile);
-          my $dsn = "DBI:SQLite:dbname=$dbFile";
-          if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, PrintError => 0, PrintWarn  => 1 })) {
-            eval    { my $sth = $dbh->prepare($query); };
-            if ($@) { # Error in query
-              $win->lblLAQueryErr->Show();
-              $win->lblLAQueryOk->Hide();
-              my $err = (split(/ at /, $@))[0];
-              $nextStep = $STR{'errQuery'} . ': '.$err;
-            } else { $win->lblLAQueryOk->Show();  $win->lblLAQueryErr->Hide(); } # Query OK
-          } else   { $win->lblLAQueryErr->Show(); $win->lblLAQueryOk->Hide();  } # Cannot connect to DB
-        } else     { $win->lblLAQueryErr->Show(); $win->lblLAQueryOk->Hide();  } # Query incomplete
-        $win->tfLAQuery->Show();
-      }
+      # A SQL Query must be set
+      if    (!$nextStep and !$win->tfLAQuery->Text()) { $nextStep = $STR{'setSQLQuery'}; }
+      # The SQL query must be tested
+      if (!$nextStep and my $query = $win->tfLAQuery->Text() and (!$win->tfLAQueryValidHidden->Text() or $win->tfLAQueryValidHidden->Text() != 1)) {
+        $nextStep = $STR{'mustTestQuery'};
       # A destination folder is required
-      elsif (!$nextStep and !$winReport->tfReportDir->Text()) { $nextStep = $STR{'setDestDir'};  }
+      } elsif (!$nextStep and !$winReport->tfReportDir->Text()) { $nextStep = $STR{'setDestDir'};  }
+      $win->tfLAQuery->Show();
     # Search Database - Suspicious activities
     } elsif ($LAFunctionStr eq $STR{'SearchSA'}) {
       # At least one selected indicator
@@ -15529,7 +15678,7 @@ sub btnProcess_Click
           &queryLADB(   $PROGDIR, $USERDIR, \$winReport, \$winLASavedQueries, \$winConfig, \$win, \%STR);
         }
         # Search Suspicious activities
-        elsif   ($LAFunctionStr eq $STR{'SearchSA'}) { searchSA_LADB($PROGDIR, $USERDIR, \$winLAQueryCols, \$winReport, \$winConfig, \$win, \%STR); }
+        elsif   ($LAFunctionStr eq $STR{'SearchSA'}) { &searchSA_LADB($PROGDIR, $USERDIR, \$winLAQueryCols, \$winReport, \$winConfig, \$win, \%STR); }
       # Split Logs
       } elsif ($functionStr eq $STR{'SplitLogs'}) { &splitLogs(\$winFileFormats, \$winFileFilters, \%ZONE_MAP, \$win, \%STR); }
       # Hide Progress

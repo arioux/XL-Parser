@@ -6,10 +6,10 @@
 # SourceForge				: https://sourceforge.net/p/xl-parser
 # GitHub						: https://github.com/arioux/XL-Parser
 # Creation          : 2016-07-15
-# Modified          : 2017-09-10
+# Modified          : 2018-01-06
 # Author            : Alain Rioux (admin@le-tools.com)
 #
-# Copyright (C) 2016-2017 Alain Rioux (le-tools.com)
+# Copyright (C) 2016-2018 Alain Rioux (le-tools.com)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -176,7 +176,7 @@ sub loadDefaultStr
   $$refSTR{'errorOUI_TXT'}    = 'Error with oui.txt file';
   $$refSTR{'errRegex'}        = 'You must enter a valid regex.';
   $$refSTR{'errBy'}           = 'You must enter a valid replacement expression.';
-  $$refSTR{'errQuery'}        = 'You must enter a valid query. Error in your query';
+  $$refSTR{'errQuery'}        = 'Error in your query';
   $$refSTR{'errQuote'}        = 'Value could not contain a quote.';
   $$refSTR{'errRegexReplace'} = 'Current error in * Replace *';
   $$refSTR{'errRegexReplaceBy'} = 'Current error in * By *';
@@ -255,6 +255,8 @@ sub loadDefaultStr
   $$refSTR{'setDestDir'}          = 'You must set a destination folder.';
   $$refSTR{'setLogFormat'}        = 'You must select a log format.';
   $$refSTR{'setSQLQuery'}         = 'You must set or select a SQL Query.';
+  $$refSTR{'validQuery'}          = 'Your query is valid';
+  $$refSTR{'mustTestQuery'}       = 'Your query must be validated. Click on the Test button.';
   # Results
   $$refSTR{'ResStats'}            = 'Stats';
   $$refSTR{'ResStatsFiles'}       = 'Files';
@@ -329,6 +331,8 @@ sub loadDefaultStr
   $$refSTR{'SelectSaved'}         = 'Select saved';
   $$refSTR{'Save'}                = 'Save';
   $$refSTR{'Reset'}               = 'Reset';
+  $$refSTR{'Load'}                = 'Load';
+  $$refSTR{'Test'}                = 'Test';
   $$refSTR{'noColumnSel'}         = 'You must select at least one column.';
   $$refSTR{'SavedQuery'}          = 'The query has been saved';
   $$refSTR{'ExecQuery'}           = 'Execute query and create report';
@@ -484,7 +488,7 @@ sub loadDefaultStr
   $$refSTR{'LFUA'}            = 'useragent';
   $$refSTR{'other'}           = 'other';
   $$refSTR{'SourceFile'}      = 'Source file';
-  $$refSTR{'chLFObjHasSpaces'}  = 'Field may contain spaces';
+  $$refSTR{'chLFObjHasSpaces'}  = 'Fields may contain spaces ("Apache style")';
   $$refSTR{'provideLFName'}     = 'You must provide a name for the log format.';
   $$refSTR{'providePatternMin'} = 'You must provide a complete pattern (See doc).';
   # Log format object Window

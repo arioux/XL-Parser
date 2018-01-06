@@ -6,10 +6,10 @@
 # SourceForge						: https://sourceforge.net/p/xl-parser
 # GitHub								: https://github.com/arioux/XL-Parser
 # Creation							: 2016-07-15
-# Modified							: 2017-09-10
+# Modified							: 2018-01-06
 # Author								: Alain Rioux (admin@le-tools.com)
 #
-# Copyright (C) 2016-2017 Alain Rioux (le-tools.com)
+# Copyright (C) 2016-2018 Alain Rioux (le-tools.com)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -1728,7 +1728,7 @@ sub loadSAInd
     $$refIndicators{7}{name}     = $$refSTR{'SDSAI6'};
     $$refIndicators{7}{score}    = 7;
     $$refIndicators{7}{limit}    = 10;
-    $$refIndicators{7}{options}  = '[^\w]union[^\w]|[^\w]select[^\w]';
+    $$refIndicators{7}{options}  = '[^\w]union[^\w]|[^\w]select[^\w]|[^\w]UNION[^\w]|[^\w]SELECT[^\w]';
     # Use of quotes (or double-quotes)
     $$refIndicators{8}{name}     = $$refSTR{'SDSAI7'};
     $$refIndicators{8}{score}    = 6;
@@ -1748,12 +1748,12 @@ sub loadSAInd
     $$refIndicators{11}{name}    = $$refSTR{'SDSAI10'};
     $$refIndicators{11}{score}   = 6;
     $$refIndicators{11}{limit}   = 10;
-    $$refIndicators{11}{options} = 'admin|login';
+    $$refIndicators{11}{options} = 'admin|login|ADMIN|LOGIN';
     # Web scanner
     $$refIndicators{12}{name}    = $$refSTR{'SDSAI11'};
     $$refIndicators{12}{score}   = 10;
     $$refIndicators{12}{limit}   = 10;
-    $$refIndicators{12}{options} = 'havij|sqlmap|nikto|webcruiser|zap|acunetix|dirbuster|zap|WCRTEXTAREATESTINPUT|r3dm0v3|ApacheBench';
+    $$refIndicators{12}{options} = 'DirBuster|ZAP|zap|w3af|Nikto|acunetix|WebCruiser|WCRTEXTAREATESTINPUT|WCRTESTINPUT|sqlmap|Havij|999.9|r3dm0v3|ApacheBench';
     # No useragent
     $$refIndicators{13}{name}    = $$refSTR{'SDSAI12'};
     $$refIndicators{13}{score}   = 5;

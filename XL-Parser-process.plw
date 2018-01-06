@@ -6,11 +6,11 @@
 # SourceForge : https://sourceforge.net/p/xl-parser
 # GitHub      : https://github.com/arioux/XL-Parser
 # Creation    : 2016-07-15
-# Modified    : 2017-09-10
-my $VERSION   = '1.1.1';
+# Modified    : 2018-01-06
+my $VERSION   = '1.2';
 # Author      : Alain Rioux (admin@le-tools.com)
 #
-# Copyright (C) 2016-2017 Alain Rioux (le-tools.com)
+# Copyright (C) 2016-2018 Alain Rioux (le-tools.com)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -8388,13 +8388,6 @@ sub searchDB
             $results{ByIPs}{$$refEntryFields[0]}{$STR{'SDSAI2a'}} = $$refEntryFields[1];
             $index++;
           }
-          # Activities only
-          $SQLQuery = 'SELECT COUNT(remoteIP) FROM (SELECT remoteIP,http_request,length(http_request) AS length FROM LOG GROUP BY ' .
-                      'remoteIP,length HAVING length > ' . $minLength . ' UNION SELECT remoteIP,http_params,length(http_params) AS ' .
-                      'length FROM LOG GROUP BY remoteIP,length HAVING length > ' . $minLength . ')';
-          $sth = $dbh->prepare($SQLQuery);
-          $sth->execute();
-          $results{ACTs}{$STR{'SDSAI2a'}} = ($sth->fetchrow_array())[0];
         # Request length (max)
         } elsif ($indicator eq $STR{'SDSAI2b'}) {
           my $minLength = $$refSearchParams{selIndicators}{$indicator}{option};
@@ -8428,8 +8421,8 @@ sub searchDB
           my $charList = $$refSearchParams{selIndicators}{$indicator}{option};
           $charList = '%' if !$charList;
           my $SQLQuery;
-          $SQLQuery = 'SELECT remoteIP,count(remoteIP) AS Number FROM LOG WHERE http_request REGEXP ' . "'" . $charList . "'" . 'OR ' .
-                      'http_params REGEXP ' . "'" . $charList . "'" . ' GROUP BY remoteIP ORDER BY Number DESC LIMIT ' .
+          $SQLQuery = 'SELECT remoteIP,count(remoteIP) AS Number FROM LOG WHERE http_request REGEXP ' . "'" . $charList . "'" .
+                      'OR http_params REGEXP ' . "'" . $charList . "'" . ' GROUP BY remoteIP ORDER BY Number DESC LIMIT ' .
                       $$refSearchParams{selIndicators}{$indicator}{limit};
           $sth = $dbh->prepare($SQLQuery);
           $sth->execute();
@@ -8507,7 +8500,8 @@ sub searchDB
           $keywords = '[^\w]union[^\w]|[^\w]select[^\w]' if !$keywords;
           my $SQLQuery;
           $SQLQuery = 'SELECT remoteIP,count(remoteIP) AS Number FROM LOG WHERE http_request REGEXP ' . "'" . $keywords . "'" .
-                      'OR http_params REGEXP ' . "'" . $keywords . "'" . ' GROUP BY remoteIP ORDER BY Number DESC LIMIT ' .
+                      ' OR http_params REGEXP ' . "'" . $keywords . "'" . ' OR useragent REGEXP ' . "'" . $keywords . "'" .
+                      ' GROUP BY remoteIP ORDER BY Number DESC LIMIT ' .
                       $$refSearchParams{selIndicators}{$indicator}{limit};
           $sth = $dbh->prepare($SQLQuery);
           $sth->execute();
@@ -8523,7 +8517,7 @@ sub searchDB
           }
           # Activities only
           $SQLQuery = 'SELECT COUNT(remoteIP) FROM (SELECT remoteIP,http_request FROM LOG WHERE http_request REGEXP ' . "'" . $keywords .
-                      "'" . ' OR http_params REGEXP ' . "'" . $keywords . "'" . ')';
+                      "'" . ' OR http_params REGEXP ' . "'" . $keywords . "'" . ' OR useragent REGEXP ' . "'" . $keywords . "'" . ')';
           $sth = $dbh->prepare($SQLQuery);
           $sth->execute();
           $results{ACTs}{$STR{'SDSAI6'}} = ($sth->fetchrow_array())[0];
@@ -9368,8 +9362,8 @@ sub SA_GetReqInd_Click
                       $minLength . ')';
       } elsif ($indicator eq $STR{'SDSAI3'}) { # URI Encoding
         my $charList = $$refSearchParams{selIndicators}{$indicator}{option};
-        $SQLQuery .= 'FROM (SELECT * FROM LOG WHERE http_request REGEXP ' . "'" . $charList .
-                      "'" . ' UNION SELECT * FROM LOG WHERE http_params REGEXP ' . "'" . $charList . "'" . ')';
+        $SQLQuery .= 'FROM (SELECT * FROM LOG WHERE http_request REGEXP ' . "'" . $charList . "'" . 
+                     ' UNION SELECT * FROM LOG WHERE http_params REGEXP ' . "'" . $charList . "'" . ')';
       } elsif ($indicator eq $STR{'SDSAI4'}) { # Method
         my $method = $$refSearchParams{selIndicators}{$indicator}{option};
         $SQLQuery .= 'FROM (SELECT * FROM LOG WHERE http_method REGEXP ' . "'" . $method . "'" . ')';
@@ -9378,30 +9372,31 @@ sub SA_GetReqInd_Click
         $SQLQuery .= 'FROM (SELECT * FROM LOG WHERE http_status REGEXP ' . "'" . $status . "'" . ')';
       } elsif ($indicator eq $STR{'SDSAI6'}) { # SQL queries
         my $keywords = $$refSearchParams{selIndicators}{$indicator}{option};
-        $SQLQuery .= 'FROM (SELECT * FROM LOG WHERE http_request REGEXP ' . "'" . $keywords .
-                      "'" . ' UNION SELECT * FROM LOG WHERE http_params REGEXP ' . "'" . $keywords . "'" . ')';
+        $SQLQuery .= 'FROM (SELECT * FROM LOG WHERE http_request REGEXP '  . "'" . $keywords . "'" . 
+                      ' UNION SELECT * FROM LOG WHERE http_params REGEXP ' . "'" . $keywords . "'" .
+                      ' UNION SELECT * FROM LOG WHERE useragent REGEXP '   . "'" . $keywords . "'" .')';
       } elsif ($indicator eq $STR{'SDSAI7'}) { # Use of quotes (or double-quotes)
         my $keywords = $$refSearchParams{selIndicators}{$indicator}{option};
         $keywords =~ s/'/''/g;
-        $SQLQuery .= 'FROM (SELECT * FROM LOG WHERE http_request REGEXP ' . "'" . $keywords .
-                      "'" . ' UNION SELECT * FROM LOG WHERE http_params REGEXP ' . "'" . $keywords . "'" . ')';
+        $SQLQuery .= 'FROM (SELECT * FROM LOG WHERE http_request REGEXP ' . "'" . $keywords . "'" . 
+                     ' UNION SELECT * FROM LOG WHERE http_params REGEXP ' . "'" . $keywords . "'" . ')';
       } elsif ($indicator eq $STR{'SDSAI8'}) { # Directory traversal
         my $keywords = $$refSearchParams{selIndicators}{$indicator}{option};
-        $SQLQuery .= 'FROM (SELECT * FROM LOG WHERE http_request REGEXP ' . "'" . $keywords .
-                      "'" . ' UNION SELECT * FROM LOG WHERE http_params REGEXP ' . "'" . $keywords . "'" . ')';
+        $SQLQuery .= 'FROM (SELECT * FROM LOG WHERE http_request REGEXP ' . "'" . $keywords . "'" . 
+                     ' UNION SELECT * FROM LOG WHERE http_params REGEXP ' . "'" . $keywords . "'" . ')';
       } elsif ($indicator eq $STR{'SDSAI9'}) { # Remote file inclusion
         my $keywords = $$refSearchParams{selIndicators}{$indicator}{option};
-        $SQLQuery .= 'FROM (SELECT * FROM LOG WHERE http_request REGEXP ' . "'" . $keywords .
-                      "'" . ' UNION SELECT * FROM LOG WHERE http_params REGEXP ' . "'" . $keywords . "'" . ')';
+        $SQLQuery .= 'FROM (SELECT * FROM LOG WHERE http_request REGEXP ' . "'" . $keywords . "'" . 
+                     ' UNION SELECT * FROM LOG WHERE http_params REGEXP ' . "'" . $keywords . "'" . ')';
       } elsif ($indicator eq $STR{'SDSAI10'}) { # Admin or login scan
         my $keywords = $$refSearchParams{selIndicators}{$indicator}{option};
-        $SQLQuery .= 'FROM (SELECT * FROM LOG WHERE http_request REGEXP ' . "'" . $keywords .
-                      "'" . ' UNION SELECT * FROM LOG WHERE http_params REGEXP ' . "'" . $keywords . "'" . ')';
+        $SQLQuery .= 'FROM (SELECT * FROM LOG WHERE http_request REGEXP ' . "'" . $keywords . "'" . 
+                     ' UNION SELECT * FROM LOG WHERE http_params REGEXP ' . "'" . $keywords . "'" . ')';
       } elsif ($indicator eq $STR{'SDSAI11'}) { # Web scanner signatures
         my $keywords = $$refSearchParams{selIndicators}{$indicator}{option};
-        $SQLQuery .= 'FROM (SELECT * FROM LOG WHERE http_request REGEXP ' . "'" . $keywords .
-                      "'" . ' OR useragent REGEXP ' . "'" . $keywords . "'" . 'UNION SELECT * FROM LOG WHERE http_params REGEXP ' .
-                      "'" . $keywords . "'" . ')';
+        $SQLQuery .= 'FROM (SELECT * FROM LOG WHERE http_request REGEXP ' . "'" . $keywords . "'" .
+                     ' UNION SELECT * FROM LOG WHERE http_params REGEXP ' . "'" . $keywords . "'" .
+                     ' UNION SELECT * FROM LOG WHERE useragent REGEXP '   . "'" . $keywords . "'" . ')';
       } elsif ($indicator eq $STR{'SDSAI12'}) { # No useragent
         my $length = $$refSearchParams{selIndicators}{$indicator}{option};
         $SQLQuery .= 'FROM (SELECT * FROM LOG WHERE useragent IS NULL OR length(useragent) < ' . $length . ')';
