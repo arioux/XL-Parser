@@ -6,10 +6,10 @@
 # SourceForge					: https://sourceforge.net/p/xl-parser
 # GitHub							: https://github.com/arioux/XL-Parser
 # Creation						: 2016-07-15
-# Modified						: 2017-09-10
+# Modified						: 2018-04-08
 # Author							: Alain Rioux (admin@le-tools.com)
 #
-# Copyright (C) 2016-2017  Alain Rioux (le-tools.com)
+# Copyright (C) 2016-2018  Alain Rioux (le-tools.com)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by

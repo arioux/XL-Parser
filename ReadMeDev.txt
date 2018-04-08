@@ -51,6 +51,7 @@ XL-Parser has been developped using ActivePerl 5.16.3 with the following modules
 - Win32-GUI (v1.08)
 - Win32-OLE (v0.1711)
 - Win32-Process (v0.16)
+- Win32-UTCFileTime (v1.58)
 - threads (v1.96)
 - threads-shared (v1.46)
 - Woothee (v1.2.0)

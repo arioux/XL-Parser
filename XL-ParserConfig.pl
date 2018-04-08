@@ -6,10 +6,10 @@
 # SourceForge					: https://sourceforge.net/p/xl-parser
 # GitHub							: https://github.com/arioux/XL-Parser
 # Creation						: 2016-07-15
-# Modified						: 2017-09-10
+# Modified						: 2018-04-08
 # Author							: Alain Rioux (admin@le-tools.com)
 #
-# Copyright (C) 2016-2017 Alain Rioux (le-tools.com)
+# Copyright (C) 2016-2018 Alain Rioux (le-tools.com)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -265,7 +265,7 @@ sub validMACOUIDB
       # If table MACOUI exists, database is valid
       my @info = $sth->fetchrow_array;
       $sth->finish();
-      return(1) if $info[2] eq 'MACOUI';
+      return(1) if $info[2] and $info[2] eq 'MACOUI';
     }
   }
   return(0);
@@ -776,7 +776,7 @@ sub loadExprHistoDB
     }
     my @info = $sth->fetchrow_array;
     $sth->finish();
-    if ($info[2] eq 'EXPR_HISTO_DB') { # If table EXPR_HISTO_DB exists, than load data
+    if ($info[2] and $info[2] eq 'EXPR_HISTO_DB') { # If table EXPR_HISTO_DB exists, than load data
       my $all = $dbh->selectall_arrayref('SELECT * FROM EXPR_HISTO_DB ORDER BY date DESC');
       # Database: table = EXPR_HISTO_DB, Fields = date, matchcase, regex, invert, expr, comment
       # Feed the grid
@@ -864,7 +864,7 @@ sub loadExprDB
     }
     my @info = $sth->fetchrow_array;
     $sth->finish();
-    if ($info[2] eq 'EXPR_DB') { # If table EXPR_DB exists, than load data
+    if ($info[2] and $info[2] eq 'EXPR_DB') { # If table EXPR_DB exists, than load data
       my $all = $dbh->selectall_arrayref("SELECT * FROM EXPR_DB ORDER BY used DESC");
       # Database: table = EXPR_DB, Fields = used, matchcase, regex, invert, expr, comment
       # Feed the grid
@@ -919,7 +919,7 @@ sub validExprHistoDB
       # If table EXPR_HISTO_DB exists, database is valid
       my @info = $sth->fetchrow_array;
       $sth->finish();
-      return(1) if $info[2] eq 'EXPR_HISTO_DB';
+      return(1) if $info[2] and $info[2] eq 'EXPR_HISTO_DB';
     }
   }
   return(0);
@@ -943,7 +943,7 @@ sub validExprDB
       # If table EXPR_DB exists, database is valid
       my @info = $sth->fetchrow_array;
       $sth->finish();
-      return(1) if $info[2] eq 'EXPR_DB';
+      return(1) if $info[2] and $info[2] eq 'EXPR_DB';
     }
   }
   return(0);
@@ -967,7 +967,7 @@ sub validLFDB
       # If table LF exists, database is valid
       my @info = $sth->fetchrow_array;
       $sth->finish();
-      return(1) if $info[2] eq 'LF';
+      return(1) if $info[2] and $info[2] eq 'LF';
     }
   }
   return(0);
@@ -1099,7 +1099,7 @@ sub validXLWHOISDB
       # If table WHOIS_DB exists, database is valid
       my @info = $sth->fetchrow_array;
       $sth->finish();
-      return(1) if $info[2] eq 'WHOIS_DB';
+      return(1) if $info[2] and $info[2] eq 'WHOIS_DB';
     }
   }
   return(0);
@@ -1122,7 +1122,7 @@ sub validIINDB
       # If table IIN exists, database is valid
       my @info = $sth->fetchrow_array;
       $sth->finish();
-      return(1) if $info[2] eq 'IIN';
+      return(1) if $info[2] and $info[2] eq 'IIN';
     }
   }
   return(0);
@@ -1436,7 +1436,7 @@ sub validResTLDDB
       # If table DATA exists, database is valid
       my @info = $sth->fetchrow_array;
       $sth->finish();
-      return(1) if $info[2] eq 'DATA';
+      return(1) if $info[2] and $info[2] eq 'DATA';
     }
   }
   return(0);
@@ -1559,7 +1559,7 @@ sub validDTDB
       # If table DT exists, database is valid
       my @info = $sth->fetchrow_array;
       $sth->finish();
-      return(1) if $info[2] eq 'DT';
+      return(1) if $info[2] and $info[2] eq 'DT';
     }
   }
   return(0);

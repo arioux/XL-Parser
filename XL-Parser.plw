@@ -7,8 +7,8 @@
 # GitHub      : https://github.com/arioux/XL-Parser
 # Description : Part of the XL-Toolkit, XL-Parser provides a bunch of functions for data extraction and analysis.
 # Creation    : 2016-07-15
-# Modified    : 2018-01-06
-my $VERSION   = '1.2';
+# Modified    : 2018-04-08
+my $VERSION   = '1.2.1';
 # Author      : Alain Rioux (admin@le-tools.com)
 #
 # Copyright (C) 2016-2018 Alain Rioux (le-tools.com)
@@ -53,6 +53,7 @@ use Excel::Writer::XLSX;
 use JSON qw(encode_json decode_json);
 use threads;
 use threads::shared;
+use Win32::UTCFileTime qw(:globally);
 require "XL-ParserConfig.pl";
 require "XL-ParserGraph.pl";
 require "XL-ParserLang.pl";
@@ -2441,8 +2442,9 @@ sub rbInputFiles_Click
   $win->tfInput->Show();
   $win->btnInput->Show();
   $win->chInputDirRecurse->Hide();
-  # If input textfield contain something that is not a file, delete it
-  $win->tfInput->Text('') if $win->tfInput->Text() and !-f $win->tfInput->Text();
+  # If input textfield contain something that is not a file or multiple files, delete it
+  my $input = $win->tfInput->Text();
+  $win->tfInput->Text('') if $input and (!-f $input and $input !~ /"[^\"]+" "[^\"]+"/);
   &isProcessReady(0);
 
 }  #--- End rbInputFiles_Click
@@ -2811,7 +2813,7 @@ sub saveFileFormats
   my $name    = $winFileFormats->gridFileFormats->GetCellText($row, 1);
   my $extList = $winFileFormats->gridFileFormats->GetCellText($row, 2);
   # If file already exists, load values
-  my $refFileFormats = &loadFileFormats("$USERDIR\\FileFormats.json", \%STR);
+  my $refFileFormats = &loadFileFormats("$USERDIR\\FileFormats.json", \$winFileFormats, \%STR);
   # Save changes
   if ($$refFileFormats{$row}{name} eq $name) {
     $$refFileFormats{$row}{extList} = $extList;
@@ -4009,6 +4011,31 @@ sub TabFunctions_Click
       &createWinLFObj() if !$winLFObj;
       &createWinDTDB(1) if !$winDTDB;
     }
+    # Verify if a valid XL-Whois database is set
+    my $xlwhoisExists = 0;
+    my $XLWHOISDBFile = $winConfig->tfXLWHOISDB->Text();
+    $xlwhoisExists = 1 if $XLWHOISDBFile and -f $XLWHOISDBFile and &validXLWHOISDB($XLWHOISDBFile);
+    $win->chLAOptResISP->Disable()            if !$xlwhoisExists;
+    $win->chLAOptResISP->Checked(0)           if !$xlwhoisExists;
+    $winReport->chReportOptIncISP->Disable()  if !$xlwhoisExists;
+    $winReport->chReportOptIncISP->Checked(0) if !$xlwhoisExists;
+    # Verify if a valid GeoIP database is set
+    my $geoipExists = 0;
+    my $GeoIPDBFile = $winConfig->tfGeoIPDB->Text();
+    $geoipExists = 1 if $GeoIPDBFile and -f $GeoIPDBFile and &validGeoIPDB($GeoIPDBFile);
+    $win->chLAOptResGeoIP->Disable()            if !$geoipExists;
+    $win->chLAOptResGeoIP->Checked(0)           if !$geoipExists;
+    $winReport->chReportOptIncGeoIP->Disable()  if !$geoipExists;
+    $winReport->chReportOptIncGeoIP->Checked(0) if !$geoipExists;
+    # Verify if a valid Datetime database is set
+    my $dtExists = 0;
+    my $DTDBFile = $winConfig->tfDTDB->Text();
+    $dtExists = 1 if $DTDBFile and -f $DTDBFile and &validDTDB($DTDBFile);
+    $win->chLAOptResWeekday->Disable()            if !$dtExists;
+    $winReport->cbOutputDTFormat->Disable()       if !$dtExists;
+    $winReport->btnOutputFormatDTDB->Disable()    if !$dtExists;
+    $winReport->chReportOptIncWeekday->Disable()  if !$dtExists;
+    $winReport->chReportOptIncWeekday->Checked(0) if !$dtExists;
     if ($win->rbInputDatabase->Checked()) {
       $win->ExtractFunctions->SetCurSel(0);
       $win->LAFunctions->Show();
@@ -4032,8 +4059,11 @@ sub TabFunctions_Click
       $win->rbLAUpdateDB->Show();
       $win->lblLF->Show();
       $win->cbLF->Show();
+      $win->cbLF->Disable()       if !$dtExists;
       $win->btnWinLFDB->Show();
+      $win->btnWinLFDB->Disable() if !$dtExists;
       $win->btnLFGuess->Show();
+      $win->btnLFGuess->Disable() if !$dtExists;
       if ($win->rbInputDir->Checked()) { $win->btnLAFileOrder->Show(); }
       else                             { $win->btnLAFileOrder->Hide(); }
       $win->chLASetReadOnly->Show();
@@ -4092,12 +4122,18 @@ sub TabFunctions_Click
   } elsif ($functionStr eq $STR{'SplitLogs'}) {
     &createWinLFObj() if !$winLFObj;
     &createWinDTDB(1) if !$winDTDB;
+    # Verify if a valid Datetime database is set
+    my $dtExists = 0;
+    my $DTDBFile = $winConfig->tfDTDB->Text();
+    $dtExists = 1 if $DTDBFile and -f $DTDBFile and &validDTDB($DTDBFile);
     $win->ExtractFunctions->Hide();
     $win->lblSplitType->Show();
     $win->rbSplitBySize->Show();
     $win->rbSplitByLines->Show();
     $win->rbSplitByTime->Show();
+    $win->rbSplitByTime->Disable()  if !$dtExists;
     &chSplitTypeChange;
+    $win->chSplitUseDTFN->Disable() if !$dtExists;
     $win->lblSplitDestDir->Show();
     $win->tfSplitDestDir->Show();
     $win->btnSplitDestDir->Show();
@@ -4261,40 +4297,64 @@ sub ExtractFunctions_Click
   # Special objects tab
   } elsif ($functionStr eq $STR{'SpecObjects'}) {
     if ($win->tvSO->GetCount() < 1) {
+      # Verify if a valid XL-Whois database is set
+      my $xlwhoisExists = 0;
+      my $XLWHOISDBFile = $winConfig->tfXLWHOISDB->Text();
+      $xlwhoisExists = 1 if $XLWHOISDBFile and -f $XLWHOISDBFile and &validXLWHOISDB($XLWHOISDBFile);
+      # Verify if a valid GeoIP database is set
+      my $geoipExists = 0;
+      my $GeoIPDBFile = $winConfig->tfGeoIPDB->Text();
+      $geoipExists = 1 if $GeoIPDBFile and -f $GeoIPDBFile and &validGeoIPDB($GeoIPDBFile);
+      # Verify if a valid TLD database is set
+      my $restldExists = 0;
+      my $resTLDDBFile = $winConfig->tfResTLDDB->Text();
+      $restldExists = 1 if $resTLDDBFile and -f $resTLDDBFile and &validResTLDDB($resTLDDBFile);
+      # Verify if a valid MACOUI database is set
+      my $macouiExists = 0;
+      my $MACOUIDBFile = $winConfig->tfMACOUIDB->Text();
+      $macouiExists = 1 if $MACOUIDBFile and -f $MACOUIDBFile and &validMACOUIDB($MACOUIDBFile);
+      # Verify if a valid IIN database is set
+      my $iinExists = 0;
+      my $IINDBFile = $winConfig->tfIINDB->Text();
+      $iinExists = 1 if $IINDBFile and -f $IINDBFile and &validIINDB($IINDBFile);
       # Set Special objects treeview values
       my $parent;
       my $node;
       $parent = $win->tvSO->InsertItem(-text => $STR{'SO_IPv4Addr'});
-      $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_IPAddr_XLWhoisDB'});
-      $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_GeoIP'});
+      $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_IPAddr_XLWhoisDB'})  if $xlwhoisExists;
+      $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_GeoIP'})             if $geoipExists;
       $node = $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_NSLookup'});
-      $win->tvSO->InsertItem(-parent => $node, -text => $STR{'SO_ResolveTLD'});
+      $win->tvSO->InsertItem(-parent => $node, -text => $STR{'SO_ResolveTLD'})          if $restldExists;
       $parent = $win->tvSO->InsertItem(-text => $STR{'SO_IPv6Addr'});
-      $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_IPAddr_XLWhoisDB'});
+      $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_IPAddr_XLWhoisDB'})  if $xlwhoisExists;
       $node = $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_NSLookup'});
-      $win->tvSO->InsertItem(-parent => $node, -text => $STR{'SO_ResolveTLD'});
+      $win->tvSO->InsertItem(-parent => $node, -text => $STR{'SO_ResolveTLD'})          if $restldExists;
       $parent = $win->tvSO->InsertItem(-text => $STR{'SO_URLs'});
       $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_URL_RemParam'});
-      $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_ResolveTLD'});
+      $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_ResolveTLD'})      if $restldExists;
       $node = $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_NSLookup'});
-      $win->tvSO->InsertItem(-parent => $node, -text => $STR{'SO_IPAddr_XLWhoisDB'});
+      $win->tvSO->InsertItem(-parent => $node, -text => $STR{'SO_IPAddr_XLWhoisDB'})  if $xlwhoisExists;
+      $win->tvSO->InsertItem(-parent => $node, -text => $STR{'SO_GeoIP'})             if $geoipExists;
       $parent = $win->tvSO->InsertItem(-text => $STR{'SO_Emails'});
       $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_Emails_Valid'});
-      $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_ResolveTLD'});
+      $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_ResolveTLD'})      if $restldExists;
       $node = $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_NSLookup'});
-      $win->tvSO->InsertItem(-parent => $node, -text => $STR{'SO_IPAddr_XLWhoisDB'});
+      $win->tvSO->InsertItem(-parent => $node, -text => $STR{'SO_IPAddr_XLWhoisDB'})  if $xlwhoisExists;
+      $win->tvSO->InsertItem(-parent => $node, -text => $STR{'SO_GeoIP'})             if $geoipExists;
       $parent = $win->tvSO->InsertItem(-text => $STR{'SO_Hostnames'});
-      $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_ResolveTLD'});
+      $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_ResolveTLD'})      if $restldExists;
       $node = $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_NSLookup'});
-      $win->tvSO->InsertItem(-parent => $node, -text => $STR{'SO_IPAddr_XLWhoisDB'});
+      $win->tvSO->InsertItem(-parent => $node, -text => $STR{'SO_IPAddr_XLWhoisDB'})  if $xlwhoisExists;
+      $win->tvSO->InsertItem(-parent => $node, -text => $STR{'SO_GeoIP'})             if $geoipExists;
       $parent = $win->tvSO->InsertItem(-text => $STR{'SO_DomainNames'});
-      $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_ResolveTLD'});
+      $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_ResolveTLD'})      if $restldExists;
       $node = $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_NSLookup'});
-      $win->tvSO->InsertItem(-parent => $node, -text => $STR{'SO_IPAddr_XLWhoisDB'});
+      $win->tvSO->InsertItem(-parent => $node, -text => $STR{'SO_IPAddr_XLWhoisDB'})  if $xlwhoisExists;
+      $win->tvSO->InsertItem(-parent => $node, -text => $STR{'SO_GeoIP'})             if $geoipExists;
       $parent = $win->tvSO->InsertItem(-text => $STR{'SO_MACAddr'});
-      $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_MACAddr_ResOUI'});
+      $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_MACAddr_ResOUI'})  if $macouiExists;
       $parent = $win->tvSO->InsertItem(-text => $STR{'SO_CreditCards'});
-      $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_CC_ResIC'});
+      $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_CC_ResIC'})        if $iinExists;
     }
     $win->tvSO->Show();
     $win->btnExtractOpenRes->Show();
@@ -7502,7 +7562,7 @@ sub btnLFPatternFromIISLog_Click
     if (open(my $fh, $oneFile)) {
       while (<$fh>) { if ($_ =~ /^#Fields:/) { $IISPatternStr = $_; last; } }
       close($fh);
-      if ($IISPatternStr =~ s/^#Fields: //) {
+      if ($IISPatternStr and $IISPatternStr =~ s/^#Fields: //) {
         my $patternStr;
         $IISPatternStr =~ s/date time/datetime/;
         my @fields = split(/ /, $IISPatternStr);
@@ -7520,7 +7580,7 @@ sub btnLFPatternFromIISLog_Click
                 $DTName =~ s/ /%20/g;
                 $patternStr .= $fieldPattern{$field}.'('.$DTName.') ';
               # If date not found
-              } else { Win32::GUI::MessageBox($winLFObj, "STR{'Date'} $STR{'formatNotFound'}...", $STR{'error'}, 0x40010); return(1); }
+              } else { Win32::GUI::MessageBox($winLFObj, "$STR{'Date'} $STR{'formatNotFound'}...", $STR{'error'}, 0x40010); return(1); }
             } else { $patternStr .= $fieldPattern{$field} . ' '; }
           } else { $patternStr .= 'other' . ' '; }
         }
@@ -14262,6 +14322,12 @@ sub tfMACOUIDB_Change
   if ($MACOUIDBFile and -f $MACOUIDBFile and &validMACOUIDB($MACOUIDBFile)) {
     $CONFIG{'MACOUI_DB_FILE'} = $MACOUIDBFile;
     &saveConfig($CONFIG_FILE, \%CONFIG);
+    # Reset options (Special objects)
+    if ($win->tvSO->GetCount() > 1) {
+      $win->tvSO->DeleteAllItems();
+      my $functionStr = $win->ExtractFunctions->GetString($win->ExtractFunctions->SelectedItem());
+      if ($functionStr eq $STR{'SpecObjects'}) { &ExtractFunctions_Click(); }
+    }
   } else {
     delete($CONFIG{'MACOUI_DB_FILE'});
     &saveConfig($CONFIG_FILE, \%CONFIG);
@@ -14462,6 +14528,14 @@ sub tfGeoIPDB_Change
   if ($GeoIPDBFile and -f $GeoIPDBFile and &validGeoIPDB($GeoIPDBFile)) {
     $CONFIG{'GEOIP_DB_FILE'} = $GeoIPDBFile;
     &saveConfig($CONFIG_FILE, \%CONFIG);
+    # Reset options (Special objects)
+    if ($win->tvSO->GetCount() > 1) {
+      $win->tvSO->DeleteAllItems();
+      my $functionStr = $win->ExtractFunctions->GetString($win->ExtractFunctions->SelectedItem());
+      if ($functionStr eq $STR{'SpecObjects'}) { &ExtractFunctions_Click(); }
+    }
+    $win->chLAOptResGeoIP->Enable();
+    $winReport->chReportOptIncGeoIP->Enable();
   } else {
     delete($CONFIG{'GEOIP_DB_FILE'});
     &saveConfig($CONFIG_FILE, \%CONFIG);
@@ -15011,6 +15085,14 @@ sub tfXLWHOISDB_Change
   if ($XLWHOISDBFile and -f $XLWHOISDBFile and &validXLWHOISDB($XLWHOISDBFile)) {
     $CONFIG{'XLWHOIS_DB_FILE'} = $XLWHOISDBFile;
     &saveConfig($CONFIG_FILE, \%CONFIG);
+    # Reset options (Special objects)
+    if ($win->tvSO->GetCount() > 1) {
+      $win->tvSO->DeleteAllItems();
+      my $functionStr = $win->ExtractFunctions->GetString($win->ExtractFunctions->SelectedItem());
+      if ($functionStr eq $STR{'SpecObjects'}) { &ExtractFunctions_Click(); }
+    }
+    $win->chLAOptResISP->Enable();
+    $winReport->chReportOptIncISP->Enable();
   } else {
     delete($CONFIG{'XLWHOIS_DB_FILE'});
     &saveConfig($CONFIG_FILE, \%CONFIG);
@@ -15064,6 +15146,12 @@ sub tfIINDB_Change
   if ($IINDBFile and -f $IINDBFile and &validIINDB($IINDBFile)) {
     $CONFIG{'IIN_DB_FILE'} = $IINDBFile;
     &saveConfig($CONFIG_FILE, \%CONFIG);
+    # Reset options (Special objects)
+    if ($win->tvSO->GetCount() > 1) {
+      $win->tvSO->DeleteAllItems();
+      my $functionStr = $win->ExtractFunctions->GetString($win->ExtractFunctions->SelectedItem());
+      if ($functionStr eq $STR{'SpecObjects'}) { &ExtractFunctions_Click(); }
+    }
   } else {
     delete($CONFIG{'IIN_DB_FILE'});
     &saveConfig($CONFIG_FILE, \%CONFIG);
@@ -15240,6 +15328,12 @@ sub tfResTLDDB_Change
   if ($resTLDDBFile and -f $resTLDDBFile and &validResTLDDB($resTLDDBFile)) {
     $CONFIG{'RES_TLD_DB_FILE'} = $resTLDDBFile;
     &saveConfig($CONFIG_FILE, \%CONFIG);
+    # Reset options (Special objects)
+    if ($win->tvSO->GetCount() > 1) {
+      $win->tvSO->DeleteAllItems();
+      my $functionStr = $win->ExtractFunctions->GetString($win->ExtractFunctions->SelectedItem());
+      if ($functionStr eq $STR{'SpecObjects'}) { &ExtractFunctions_Click(); }
+    }
   } else {
     delete($CONFIG{'RES_TLD_DB_FILE'});
     &saveConfig($CONFIG_FILE, \%CONFIG);
@@ -15337,6 +15431,28 @@ sub tfDTDB_Change
   if ($DTDBFile and -f $DTDBFile and &validDTDB($DTDBFile)) {
     $CONFIG{'DT_DB_FILE'} = $DTDBFile;
     &saveConfig($CONFIG_FILE, \%CONFIG);
+    $win->cbLF->Enable();
+    $win->btnWinLFDB->Enable();
+    $win->btnLFGuess->Enable();
+    $win->chLAOptResWeekday->Enable();
+    $win->rbSplitByTime->Enable();
+    $win->chSplitUseDTFN->Enable();
+    $winReport->cbOutputDTFormat->Enable();
+    $winReport->btnOutputFormatDTDB->Enable();
+    $winReport->chReportOptIncWeekday->Enable();
+    # Load the Datetime database
+    if (!$winLFDB) {
+      &createWinLFDB(1);
+      &createWinLFObj() if !$winLFObj;
+      &createWinDTDB(1) if !$winDTDB;
+    } else {
+      &loadDTDB;
+      &cbInputDTFormatAddITems();
+      $winLFObj->cbLFObjDT->SetCurSel(0);
+      $win->cbSplitTimeFormat->SetCurSel(0);
+      &cbOutputDTFormatAddITems();
+      $winReport->cbOutputDTFormat->SetCurSel(0);
+    }
   } else {
     delete($CONFIG{'DT_DB_FILE'});
     &saveConfig($CONFIG_FILE, \%CONFIG);
@@ -15509,8 +15625,6 @@ sub isProcessReady
     # Create or Update database
     if (!$win->rbInputDatabase->Checked()) {
       $win->btnLAFilters->Enable();
-      if ($nextStep) { $win->btnLFGuess->Disable(); }
-      else           { $win->btnLFGuess->Enable();  }
       # A log format must be selected
       if (!$nextStep and $win->cbLF->IsVisible() and !$win->cbLF->GetCurSel()) { $nextStep = $STR{'setLogFormat'}; }
       # A destination folder is required
@@ -15786,7 +15900,7 @@ sub btnAbout_Click
                         -pos         => [140, 80]               ,
                         -font        => $font10                 ,
                         -background  => [255, 255, 255]         ,
-                        -text        => '© Copyright 2016-2017 Alain Rioux', );
+                        -text        => '© Copyright 2016-2018 Alain Rioux', );
   $winAbout->Center($win);
   $winAbout->DoModal();
   return(1);
