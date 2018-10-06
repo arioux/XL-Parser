@@ -6,8 +6,8 @@
 # SourceForge : https://sourceforge.net/p/xl-parser
 # GitHub      : https://github.com/arioux/XL-Parser
 # Creation    : 2016-07-15
-# Modified    : 2018-04-08
-my $VERSION   = '1.2.1';
+# Modified    : 2018-10-06
+my $VERSION   = '1.2.2';
 # Author      : Alain Rioux (admin@le-tools.com)
 #
 # Copyright (C) 2016-2018 Alain Rioux (le-tools.com)
@@ -9296,7 +9296,6 @@ sub SA_CopySelRow_Click
   my (@coord) = $winSearchSA->gridResultsSA_IPs->GetSelectedCellRange();
   my $content;
   # Selected IPs
-  my @listIPs;
   my $lastSelectedRow; 
   if ($coord[2]) { $lastSelectedRow = $coord[2]; }
   else           { $lastSelectedRow = $coord[0]; }

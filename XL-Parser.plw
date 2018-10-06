@@ -7,8 +7,8 @@
 # GitHub      : https://github.com/arioux/XL-Parser
 # Description : Part of the XL-Toolkit, XL-Parser provides a bunch of functions for data extraction and analysis.
 # Creation    : 2016-07-15
-# Modified    : 2018-04-08
-my $VERSION   = '1.2.1';
+# Modified    : 2018-10-06
+my $VERSION   = '1.2.2';
 # Author      : Alain Rioux (admin@le-tools.com)
 #
 # Copyright (C) 2016-2018 Alain Rioux (le-tools.com)
@@ -15854,7 +15854,7 @@ sub btnStop_Click
 sub btnHelp_Click
 #--------------------------#
 {
-  # Open Firefox to XL-FileTools page
+  # Open XL-Parser documentation page with default browser
   $win->ShellExecute('open', $URL_DOC,'','',1) or Win32::GUI::MessageBox($win, Win32::FormatMessage(Win32::GetLastError()), "$STR{'update3'} XL-Parser",0x40010);
 
 }  #--- End btnHelp_Click

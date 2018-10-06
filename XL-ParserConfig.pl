@@ -220,7 +220,7 @@ sub updateTool
   my ($confirm, $VERSION, $refWinConfig, $refWin, $refSTR) = @_;
   # Download the version file  
   my $ua = new LWP::UserAgent;
-  $ua->agent("XL-FileTools Update $VERSION");
+  $ua->agent("XL-Parser Update $VERSION");
   $ua->default_header('Accept-Language' => 'en');
   my $req = new HTTP::Request GET => $URL_VER;
   my $res = $ua->request($req);
@@ -237,7 +237,7 @@ sub updateTool
       my $answer = Win32::GUI::MessageBox($$refWinConfig, "$$refSTR{'Version'} $currVer $$refSTR{'update5'} ?", $$refSTR{'update3'}, 0x40024); # Download available
       # Download the update
       if ($answer == 6) {
-        # Open Firefox to XL-FileTools page
+        # Open XL-Parser page with default browser
         $$refWin->ShellExecute('open', $URL_TOOL,'','',1) or
           Win32::GUI::MessageBox($$refWinConfig, Win32::FormatMessage(Win32::GetLastError()), "$$refSTR{'update3'} XL-FileTools",0x40010);
       }
