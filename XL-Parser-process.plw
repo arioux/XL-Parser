@@ -1,16 +1,16 @@
 #!/usr/bin/perl
 # Perl - v: 5.16.3
 #------------------------------------------------------------------------------#
-# Extract.pl  : XL-Parser process for extraction and log analysis (must be packaged as .exe)
-# Website     : http://le-tools.com/XL-Parser.html
-# SourceForge : https://sourceforge.net/p/xl-parser
-# GitHub      : https://github.com/arioux/XL-Parser
-# Creation    : 2016-07-15
-# Modified    : 2018-10-06
-my $VERSION   = '1.2.2';
-# Author      : Alain Rioux (admin@le-tools.com)
+# XL-Parser-process.plw : XL-Parser process for extraction and log analysis (must be packaged as .exe)
+# Website               : http://le-tools.com/XL-Parser.html
+# SourceForge           : https://sourceforge.net/p/xl-parser
+# GitHub                : https://github.com/arioux/XL-Parser
+# Creation              : 2016-07-15
+# Modified              : 2019-02-17
+my $VERSION             = '1.3';
+# Author                : Alain Rioux (admin@le-tools.com)
 #
-# Copyright (C) 2016-2018 Alain Rioux (le-tools.com)
+# Copyright (C) 2016-2019 Alain Rioux (le-tools.com)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -41,9 +41,6 @@ use threads;
 use threads::shared;
 use JSON qw(encode_json decode_json);
 use Time::Local 'timelocal';
-use B::Hooks::EndOfScope::PP::FieldHash;
-use B::Hooks::EndOfScope::PP;
-use Params::Validate::PP;
 use DateTime;
 use DateTime::Format::Duration;
 use DateTime::Format::Strptime;
@@ -70,7 +67,9 @@ use Domain::PublicSuffix;
 use Net::DNS;
 use base qw/Net::DNS::Resolver::Base/;
 use Net::CIDR;
-use Geo::IP;
+use GeoIP2::Database::Reader;
+use Net::IP::Lite;
+use NetAddr::IP;
 use DBI;
 use Woothee;
 use Parse::HTTP::UserAgent;
@@ -489,6 +488,7 @@ sub createWinResults
                                         -text        => "$STR{'Extraction'} $STR{'Results'}",
                                         -pos         => [$winPosX, $winPosY]  ,
                                         -size        => [800, 400]            ,
+                                        -minsize     => [800, 400]            ,
                                         -background  => [255, 255, 255]       ,
                                         -hasmaximize => 1                     ,
                                         -hasminimize => 1                     ,
@@ -633,7 +633,7 @@ sub createWinResults
     "> $STR{'showResults'} ($STR{'ResultsOnly'}-$STR{'NoDuplicates'})"  => 'showResFileResultsResOnlyNoDupl',
     "> $STR{'openFile'}"                           => 'openResFile'              ,
     "> $STR{'copyFile'}".'...'                     => 'copyResFile'              ,
-    " > -" => 0,
+    "> -" => 0,
     "> $STR{'selectAll'}"                          => 'selectAllResFiles'        ,
     "> $STR{'copySelRow'}"                         => 'copySelResFilesRow'       ,
   );
@@ -655,7 +655,7 @@ sub createWinResults
     "> $STR{'showResults'} ($STR{'NoDuplicates'})" => 'showResExprResultsNoDupl' ,
     "> $STR{'showResults'} ($STR{'ResultsOnly'})"  => 'showResExprResultsResOnly',
     "> $STR{'showResults'} ($STR{'ResultsOnly'}-$STR{'NoDuplicates'})"  => 'showResExprResultsResOnlyNoDupl',
-    " > -" => 0,
+    "> -" => 0,
     "> $STR{'selectAll'}"                          => 'selectAllResExpr' ,
     "> $STR{'copySelRow'}"                         => 'copySelResExprRow',
   );
@@ -698,6 +698,18 @@ sub createWinResults
 sub winResults_Resize
 #--------------------------#
 {
+  my $widthColVal = (($winResults->ScaleWidth()-175)/3)-145;
+  $winResults->lblResStatsFilesVal->Width($widthColVal);
+  $winResults->lblResStatsLinesVal->Width($widthColVal);
+  $winResults->lblResStatsSize->Left(295+$widthColVal);
+  $winResults->lblResStatsDuration->Left(295+$widthColVal);
+  $winResults->lblResStatsSizeVal->Left($winResults->lblResStatsSize->Left()+145);
+  $winResults->lblResStatsDurationVal->Left($winResults->lblResStatsSize->Left()+145);
+  $winResults->lblResStatsSizeVal->Width($widthColVal);
+  $winResults->lblResStatsDurationVal->Width($widthColVal);
+  $winResults->lblResStatsResults->Left($winResults->lblResStatsSizeVal->Left()+$widthColVal+10);
+  $winResults->lblResStatsResultsVal->Left($winResults->lblResStatsResults->Left()+145);
+  $winResults->lblResStatsResultsVal->Width($widthColVal);
   $winResults->btnSaveResultsExtract->Left($winResults->ScaleWidth()-210);
   $winResults->btnWinReport->Left($winResults->ScaleWidth()-105);
   $winResults->gridResFiles->Width($winResults->ScaleWidth()-150);
@@ -876,7 +888,7 @@ sub createWinReport
   $winReport->AddCheckbox(      -name         => 'chReportOptIncGeoIP'   ,
                                 -size         => [100, 22]               ,
                                 -pos          => [515,143]               ,
-                                -text         => $STR{'GeoIPDB'}         ,
+                                -text         => $STR{'GeoIP'}           ,
                                 -background   => [255, 255, 255]         ,
                                 -font         => $font10                 ,
                                 -tabstop      => 1                       , );
@@ -912,7 +924,7 @@ sub invalidParams
 {
   $THR = threads->create(sub {
     sleep(1);
-    Win32::GUI::MessageBox(0, $STR{'invalidParams'}, $STR{'error'}, 0x40010);
+    Win32::GUI::MessageBox(0, $STR{'invalidParams'}, $STR{'Error'}, 0x40010);
     exit(0);
   });
   
@@ -988,7 +1000,7 @@ sub extractExprFiles
         my $errMsg = (split(/ at /, $_[0]))[0];
         $errMsg =~ s/[\t\r\n]/ /g;
         $winResults->ChangeCursor($ARROW);
-        Win32::GUI::MessageBox($winResults, "$STR{'errorMsg'}: $errMsg", $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($winResults, "$STR{'errorMsg'}: $errMsg", $STR{'Error'}, 0x40010);
         threads->exit();
       };
       $winResults->ChangeCursor($HOURGLASS);
@@ -1038,7 +1050,7 @@ sub extractExprFiles
         } else {        
           &getListFiles($refListFiles, $refExtractParams);
           # Store results in a JSON file
-          if (open(my $json, '>:encoding(cp1252)', "$REPORTDIR\\CurrentListFiles.json")) {
+          if (open(my $json, "$REPORTDIR\\CurrentListFiles.json")) {
             my $jsonObj = JSON->new;
             my $jsonText = $jsonObj->encode($refListFiles);
             print $json $jsonText;
@@ -1274,7 +1286,7 @@ sub extractExprFiles
           }
           # Compile results
           # By file
-          $results{byFile}{$file}{fileSize}   =  $fileSize if $fileSize; # Size
+          $results{byFile}{$file}{fileSize}   = $fileSize if $fileSize; # Size
           $results{byFile}{$file}{nbrLines}   = $fileLines;   # Number of lines
           $results{byFile}{$file}{nbrResults} = $fileResults; # Number of results
           # Add file to the grid By files
@@ -1342,13 +1354,13 @@ sub extractExprFiles
         $winResults->btnSaveResultsExtract->Enable();
         $winResults->btnWinReport->Enable();
         # Store results in a JSON file
-        if (scalar(keys %results) and open(my $json, '>:encoding(cp1252)', "$REPORTDIR\\CurrentExtractResults-" . $PROCESSID .'.json')) {
+        if (scalar(keys %results) and open(my $json, '>:encoding(UTF-8)', "$REPORTDIR\\CurrentExtractResults-" . $PROCESSID .'.json')) {
           my $jsonObj = JSON->new;
           my $jsonText = $jsonObj->encode(\%results);
           print $json $jsonText;
           close($json);
         }
-      } else { Win32::GUI::MessageBox($winResults, $STR{'noFile'}, $STR{'error'}, 0x40010); } # No files
+      } else { Win32::GUI::MessageBox($winResults, $STR{'noFile'}, $STR{'Error'}, 0x40010); } # No files
       $winResults->pb->SetPos(0);
       $winResults->pb->Hide;
       $winResults->lblCurr->Text('');
@@ -3994,13 +4006,13 @@ sub extractSOFiles
       };
       # Thread 'die' signal handler
       $SIG{__DIE__} = sub {
-        #return if $_[0] =~ /Invalid version format/;  # Worked for XL-Tools, to test, prevent crash from Parse::HTTP::UserAgent, ex.: Java/1.7.0_09-icedtea
-        die if $_[0] =~ /Negative length/ and $_[0] =~ /IO\/Handle.pm/;
-        print $_[0] . "\n";
+        return if $_ and $_[0] =~ /Invalid version format/;
+        return if $_ and $_->isa('GeoIP2::Error');
+        die if $_ and $_[0] =~ /Negative length/ and $_[0] =~ /IO\/Handle.pm/;
         my $errMsg = (split(/ at /, $_[0]))[0];
         $errMsg =~ s/[\t\r\n]/ /g;
         $winResults->ChangeCursor($ARROW);
-        Win32::GUI::MessageBox($winResults, "$STR{'errorMsg'}: $errMsg", $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($winResults, "$STR{'errorMsg'}: $errMsg", $STR{'Error'}, 0x40010);
         threads->exit();
       };
       $winResults->ChangeCursor($HOURGLASS);
@@ -4043,7 +4055,7 @@ sub extractSOFiles
           $validEmail = 1;
           # Load TLD Database
           $TLDDB = Domain::PublicSuffix->new({ 'data_file' => $$refExtractParams{TLD_DB_FILE} }) or
-          Win32::GUI::MessageBox($winResults, $STR{'errLoadingDB'}, $STR{'error'}, 0x40010);
+          Win32::GUI::MessageBox($winResults, $STR{'errLoadingDB'}, $STR{'Error'}, 0x40010);
         } else { $validEmail = 0; }
         # Set remove Param option (for URLs), this option has to be used while extracting
         my $remParam;
@@ -4070,9 +4082,12 @@ sub extractSOFiles
         # Load required databases
         my $dbhTLD       = &loadTLDDB($$refExtractParams{RES_TLD_DB_FILE})     if $ResolveTLD;
         my $dbhXLWhoisDB = &loadXLWhoisDB($$refExtractParams{XLWHOIS_DB_FILE}) if $IPAddr_XLWhoisDB;
-        my $dbhGeoIP     = &loadGeoIP($$refExtractParams{GEOIP_DB_FILE})       if $ResolveGeoIP;
         my $dbhMACAddr   = &loadMACAddrDB($$refExtractParams{MACOUI_DB_FILE})  if $MACAddr_ResOUI;
         my $refListIIN   = &loadListIIN($$refExtractParams{IIN_DB_FILE})       if $CC_ResIC;
+        my $readerGeoIP;
+        if ($ResolveGeoIP) {
+          $readerGeoIP = GeoIP2::Database::Reader->new(file => $$refExtractParams{GEOIP_DB_FILE}, locales => [$$refExtractParams{GEOIP_LANG}, 'en']);
+        }
         # If tmp reports already exist, delete
         unlink($tmpReport1) if -e $tmpReport1;
         unlink($tmpReport2) if -e $tmpReport2;
@@ -4199,13 +4214,14 @@ sub extractSOFiles
           # Update results in files
           if ($fileResults) {
             # Add results to temp report 1 (By File)
-            if (open(my $tmpFH, '>>', $tmpReport1)) {
+            if (open(my $tmpFH, ">>:encoding(UTF-8)", $tmpReport1)) {
               foreach (@{$refResByFile}) { print $tmpFH "$file\t$_\n"; }
               close($tmpFH);
             }
             # Add results to temp report 2 (By Object)
-            if (open(my $tmpFH, '>', $tmpReport2)) {
+            if (open(my $tmpFH, ">:encoding(UTF-8)", $tmpReport2)) {
               foreach my $object (keys %{$results{bySO}}) {
+                $winResults->lblCurr->Text("$STR{'Resolving'} $object".'...');
                 foreach my $res (keys %{$results{bySO}{$object}}) {
                   if ($res ne 'nbrRes') {
                     my $newLine = "$object\t$res\t$results{bySO}{$object}{$res}{nbr}\t";
@@ -4250,7 +4266,7 @@ sub extractSOFiles
                     if ($IPAddr_XLWhoisDB) {
                       my $ip;
                       if ($res =~ /(?:[^0-9]|^)((?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))(?:[^0-9\.]|$)/ or
-                          $res =~ /($IPv6_re)/) {
+                          $res =~ /(?:[^0-9a-fA-F\:]|^)($IPv6_re)(?:[^0-9a-fA-F\:]|$)/) {
                         $ip = $1;
                       } elsif ($results{bySO}{$object}{$res}{$STR{'SO_NSLookup'}}) {
                         $ip = $results{bySO}{$object}{$res}{$STR{'SO_NSLookup'}};
@@ -4273,7 +4289,7 @@ sub extractSOFiles
                       if (exists($$refExtractParams{SO}{$object}{options}{$STR{'SO_GeoIP'}})) {
                         if ($results{bySO}{$object}{$res}{$STR{'SO_GeoIP'}}) { # Already resolved
                           $newLine .= "$results{bySO}{$object}{$res}{$STR{'SO_GeoIP'}}\t";
-                        } elsif (my $resGeoIP = &resolveGeoIP($res, \$dbhGeoIP)) {
+                        } elsif (my $resGeoIP = &resolveGeoIP($res, \$readerGeoIP)) {
                           $newLine .= "$resGeoIP\t";
                           $results{bySO}{$object}{$res}{$STR{'SO_GeoIP'}} = $resGeoIP;
                         } else {
@@ -4389,13 +4405,13 @@ sub extractSOFiles
         $winResults->btnSaveResultsExtract->Enable();
         $winResults->btnWinReport->Enable();
         # Store results in a JSON file
-        if (scalar(keys %results) and open(my $json, '>:encoding(cp1252)', "$REPORTDIR\\CurrentExtractResults-" . $PROCESSID .'.json')) {
+        if (scalar(keys %results) and open(my $json, '>:encoding(UTF-8)', "$REPORTDIR\\CurrentExtractResults-" . $PROCESSID .'.json')) {
           my $jsonObj = JSON->new;
           my $jsonText = $jsonObj->encode(\%results);
           print $json $jsonText;
           close($json);
         }
-      } else { Win32::GUI::MessageBox($winResults, $STR{'noFile'}, $STR{'error'}, 0x40010); } # No files
+      } else { Win32::GUI::MessageBox($winResults, $STR{'noFile'}, $STR{'Error'}, 0x40010); } # No files
       $winResults->pb->SetPos(0);
       $winResults->pb->Hide;
       $winResults->lblCurr->Text('');
@@ -4854,7 +4870,7 @@ sub extractIPv6Addr
   my @resLine;
   # Extraction
   chomp($line);
-  while ($line =~ /($IPv6_re)/) {
+  while ($line =~ /(?:[^0-9a-fA-F\:]|^)($IPv6_re)(?:[^0-9a-fA-F\:]|$)/) {
     my $el = $1;
     push(@resLine, "$object\t$el");
     $nbrResLine++;
@@ -5311,16 +5327,6 @@ sub loadXLWhoisDB
 }  #--- End loadXLWhoisDB
 
 #------------------------------------------------------------------------------#
-sub loadGeoIP
-#------------------------------------------------------------------------------#
-{
-  # Load GeoIP Database
-  my $dbFile = shift;
-  if (my $dbhGeoIP = Geo::IP->open($dbFile, GEOIP_MEMORY_CACHE)) { return($dbhGeoIP); }
-  
-}  #--- End loadGeoIP
-
-#------------------------------------------------------------------------------#
 sub loadMACAddrDB
 #------------------------------------------------------------------------------#
 {
@@ -5360,7 +5366,8 @@ sub resolveISP
   # Local variables
   my $res             = shift;
   my $refDbhXLWhoisDB = shift;
-  if ($res =~ /(?:[^0-9]|^)((?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))(?:[^0-9\.]|$)/ or $res =~ /($IPv6_re)/) {
+  if ($res =~ /(?:[^0-9]|^)((?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))(?:[^0-9\.]|$)/ or
+      $res =~ /(?:[^0-9a-fA-F\:]|^)($IPv6_re)(?:[^0-9a-fA-F\:]|$)/) {
     my $ip = $1;
     my $answer;
     if    ($res =~ /\./) { $answer = &checkIP_WhoisDB_IPv4($ip, $refDbhXLWhoisDB); } # IPv4
@@ -5376,16 +5383,21 @@ sub resolveGeoIP
 #------------------------------------------------------------------------------#
 {
   # Local variables
-  my $res         = shift;
-  my $refDbhGeoIP = shift;
-  if ($res =~ /(?:[^0-9]|^)((?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))(?:[^0-9\.]|$)/) {
-    if (my $record = $$refDbhGeoIP->record_by_addr($1)) {
+  my $res            = shift;
+  my $refReaderGeoIP = shift;
+  if ($res =~ /(?:[^0-9]|^)((?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))(?:[^0-9\.]|$)/ or
+      $res =~ /(?:[^0-9a-fA-F\:]|^)($IPv6_re)(?:[^0-9a-fA-F\:]|$)/) {
+    my $record;
+    eval { $record = $$refReaderGeoIP->city(ip => $1); };
+    if (!$@) {
       my $answer;
-      $answer .= $record->city        .', ' if $record->city;
-      $answer .= $record->region_name .', ' if $record->region_name;
-      $answer .= $record->country_name.', ' if $record->country_name;
-      chop($answer); chop($answer);
-      return($answer);
+      $answer .= $record->city()->name() .', '                    if $record->city()->name();
+      $answer .= $record->most_specific_subdivision->name() .', ' if $record->most_specific_subdivision->name();
+      $answer .= $record->country()->name().', '                  if $record->country()->name();
+      if ($answer) {
+        chop($answer); chop($answer);
+        return(encode('cp1252', $answer));
+      }
     }
   }
   return(undef);
@@ -5765,7 +5777,7 @@ sub copyResFile_Click
         $winResults->ChangeCursor($ARROW);
         # Final message
         if ($statusCopy) { Win32::GUI::MessageBox($winResults, "$STR{'Copying'} $STR{'Finished'}", "XL-Parser $VERSION", 0x40040); }
-        else             { Win32::GUI::MessageBox($winResults, "$STR{'errorCopying'}: $copyMsg", $STR{'error'}, 0x40010); }
+        else             { Win32::GUI::MessageBox($winResults, "$STR{'errorCopying'}: $copyMsg", $STR{'Error'}, 0x40010); }
       }
     }
   }
@@ -6354,7 +6366,7 @@ sub btnSaveResultsExtract_Click
         $winResults->lblCount->Text('');
         $winResults->pb->Hide();
         $winResults->ChangeCursor($ARROW);
-        Win32::GUI::MessageBox($winResults, "$STR{'errorMsg'}: $errMsg", $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($winResults, "$STR{'errorMsg'}: $errMsg", $STR{'Error'}, 0x40010);
         threads->exit();
       };
       # Progress
@@ -6368,7 +6380,7 @@ sub btnSaveResultsExtract_Click
       $winResults->lblCurr->Text($STR{'LoadingResults'}.'...');
       $resFile .= '.json' if $resFile !~ /\.json$/;
       my ($refResults, $refSearchParams);
-      if (open(my $json, "$REPORTDIR\\CurrentExtractResults-" . $PROCESSID .'.json')) {
+      if (open(my $json, '<:encoding(UTF-8)', "$REPORTDIR\\CurrentExtractResults-" . $PROCESSID .'.json')) {
         my $jsonText = <$json>;
         close($json);
         my $jsonObj = JSON->new;
@@ -6378,7 +6390,7 @@ sub btnSaveResultsExtract_Click
       my $extractParamsFilename = $REPORTDIR;
       if    ($PROCESSNAME eq 'Extract-Expr') { $extractParamsFilename .= "\\ExtractExprParams-" . $PROCESSID .'.json'; }
       elsif ($PROCESSNAME eq 'Extract-SO'  ) { $extractParamsFilename .= "\\ExtractSOParams-"   . $PROCESSID .'.json'; }
-      if (open(my $json, $extractParamsFilename)) {
+      if (open(my $json, '<:encoding(UTF-8)', $extractParamsFilename)) {
         my $jsonText = <$json>;
         close($json);
         my $jsonObj = JSON->new;
@@ -6390,7 +6402,7 @@ sub btnSaveResultsExtract_Click
       # Saved Results to JSON files
       $winResults->lblCurr->Text($STR{'SavingResults'}.'...');
       my %mergedHash  = (%$refSearchParams, %$refResults);
-      if (open(my $json, '>:encoding(cp1252)', $resFile)) {
+      if (open(my $json, '>:encoding(UTF-8)', $resFile)) {
         my $jsonObj = JSON->new;
         my $jsonText = $jsonObj->encode(\%mergedHash);
         print $json $jsonText;
@@ -6487,7 +6499,7 @@ sub tfReportDir_Change
     $winReport->btnReportGo->Disable();
     if ($saveDir) {
       $winReport->tfReportDir->Text('');
-      Win32::GUI::MessageBox($winReport, $STR{'invalidDir'}, $STR{'error'}, 0x40010);
+      Win32::GUI::MessageBox($winReport, $STR{'invalidDir'}, $STR{'Error'}, 0x40010);
     }
   }
 
@@ -6569,7 +6581,7 @@ sub btnReportGo_Click
 #--------------------------#
 {
   # Avoid new thread
-  if ($THR and $THR->is_running()) { Win32::GUI::MessageBox($winResults, $STR{'processRunning'}, $STR{'error'}, 0x40010); }
+  if ($THR and $THR->is_running()) { Win32::GUI::MessageBox($winResults, $STR{'processRunning'}, $STR{'Error'}, 0x40010); }
   else {
     # Local variables
     my $reportDir = $winReport->tfReportDir->Text();
@@ -6603,7 +6615,7 @@ sub btnReportGo_Click
               $winResults->lblCurr->Text('');
               $winResults->lblCount->Text('');
               $winResults->ChangeCursor($ARROW);
-              Win32::GUI::MessageBox($winResults, "$STR{'errorMsg'}: $errMsg", $STR{'error'}, 0x40010);
+              Win32::GUI::MessageBox($winResults, "$STR{'errorMsg'}: $errMsg", $STR{'Error'}, 0x40010);
               threads->exit();
             };
             # Close Report Window
@@ -6883,8 +6895,8 @@ sub writeReportExprHTML
         my $i = 1;
         while (-e $report) { $report = "$reportDir\\XL-Parser $STR{'report'} ($i).html"; $i++; }
       }
-      # Open 
-      if (open(my $fhReport, '>', $report)) {
+      # Open
+      if (open(my $fhReport, ">$report")) {
         my $count = 0;
         my @headers;
         # Headers
@@ -6893,7 +6905,7 @@ sub writeReportExprHTML
           push(@headers, $STR{'Expression'})           if $incExpression;
           push(@headers, $STR{'Results'});
         }
-        &createReportHTML($fhReport, \@headers);
+        &createReportHTML($fhReport, \@headers, 'utf8');
         while (<$tmpReportFH>) {
           print $fhReport "<tr>";
           my @fields = split(/\t/, $_);
@@ -6921,7 +6933,7 @@ sub writeReportExprHTML
       my %fhReports;
       my $count = 0;
       while (<$tmpReportFH>) {
-        my @fields = split(/\t/, $_);
+        my @fields     = split(/\t/, $_);
         my $source     = shift(@fields);
         my $expression = shift(@fields);
         my $reportName;
@@ -6955,7 +6967,7 @@ sub writeReportExprHTML
             push(@headers, $STR{'Expression'})           if $incExpression;
             push(@headers, $STR{'Results'});
           }
-          &createReportHTML($fhReport, \@headers);
+          &createReportHTML($fhReport, \@headers, 'cp1252');
         }
         if ($fhReport) {
           print $fhReport "<tr>";
@@ -7105,7 +7117,7 @@ sub writeReportSOXLSX
   my $incSO           = 1 if $winReport->chReportOptIncExpr->Checked();
   my $replaceReport   = 1 if $winReport->chReplaceReport->Checked();
   my @return;
-  if (open(my $tmpReportFH, $tmpReport)) {
+  if (open(my $tmpReportFH, '<:encoding(UTF-8)', $tmpReport)) {
     # Check existing options data
     my $NSLookup         = 0;
     my $ResolveTLD       = 0;
@@ -7393,7 +7405,7 @@ sub writeReportSOHTML
   my $incSO           = 1 if $winReport->chReportOptIncExpr->Checked();
   my $replaceReport   = 1 if $winReport->chReplaceReport->Checked();
   my @return;
-  if (open(my $tmpReportFH, $tmpReport)) {
+  if (open(my $tmpReportFH, '<:encoding(UTF-8)', $tmpReport)) {
     # Check existing options data
     my $NSLookup         = 0;
     my $ResolveTLD       = 0;
@@ -7428,7 +7440,7 @@ sub writeReportSOHTML
         while (-e $report) { $report = "$reportDir\\XL-Parser $STR{'report'} ($i).html"; $i++; }
       }
       # Open 
-      if (open(my $fhReport, '>', $report)) {
+      if (open(my $fhReport, '>:encoding(UTF-8)', , $report)) {
         my $count = 0;
         my @headers;
         # Headers
@@ -7444,7 +7456,7 @@ sub writeReportSOHTML
           push(@headers, $STR{'SO_MACAddr_ResOUI'})   if $MACAddr_ResOUI;
           push(@headers, $STR{'SO_CC_ResIC'})         if $CC_ResIC;
         }
-        &createReportHTML($fhReport, \@headers);
+        &createReportHTML($fhReport, \@headers, 'utf8');
         while (<$tmpReportFH>) {
           print $fhReport "<tr>";
           my @fields = split(/\t/, $_);
@@ -7485,7 +7497,7 @@ sub writeReportSOHTML
         }
         if (exists($fhReports{$object})) { # Already open
           $fhReport = $fhReports{$object};
-        } elsif (open(my $fh, '>', $report)) { # Open a new report
+        } elsif (open(my $fh, '>:encoding(UTF-8)', $report)) { # Open a new report
           $fhReport = $fh;
           $fhReports{$object} = $fh;
           push(@return, $report);
@@ -7502,7 +7514,7 @@ sub writeReportSOHTML
             push(@headers, $STR{'SO_MACAddr_ResOUI'})   if (exists($$refSO{$object}{opt}{$STR{'SO_MACAddr_ResOUI'}}));
             push(@headers, $STR{'SO_CC_ResIC'})         if (exists($$refSO{$object}{opt}{$STR{'SO_CC_ResIC'}}));
           }
-          &createReportHTML($fhReport, \@headers);
+          &createReportHTML($fhReport, \@headers, 'utf8');
         }
         if ($fhReport) {
           print $fhReport "<tr>";
@@ -7552,7 +7564,7 @@ sub writeReportSOTXT
   my $incSO           = 1 if $winReport->chReportOptIncExpr->Checked();
   my $replaceReport   = 1 if $winReport->chReplaceReport->Checked();
   my @return;
-  if (open(my $tmpReportFH, $tmpReport)) {
+  if (open(my $tmpReportFH, '<:encoding(UTF-8)', $tmpReport)) {
     # Check existing options data
     my $NSLookup         = 0;
     my $ResolveTLD       = 0;
@@ -7587,7 +7599,7 @@ sub writeReportSOTXT
         while (-e $report) { $report = "$reportDir\\XL-Parser $STR{'report'} ($i).txt"; $i++; }
       }
       # Open 
-      if (open(my $fhReport, ">$report")) {
+      if (open(my $fhReport, '>:encoding(UTF-8)', $report)) {
         my $count = 0;
         # Check existing options data
         my $NSLookup         = 0;
@@ -7624,14 +7636,14 @@ sub writeReportSOTXT
         while (<$tmpReportFH>) {
           my @fields = split(/\t/, $_);
           my $newLine;
-          $newLine  .= shift(@fields) . "\t" if $incSO;
+          my $object = shift(@fields);
+          $newLine  .= $object . "\t" if $incSO;
           my $result = shift(@fields);
           my $nbrRes = shift(@fields);
           $newLine  .= "$result\t$nbrRes\t";
           $newLine  .= join("\t", @fields) . "\t";
-          chop($newLine);
+          chop($newLine); chomp($newLine);
           print $fhReport "$newLine\n";
-          
           # Update progress
           $count += $nbrRes;
           $winResults->lblCount->Text("$count / $nbrResults");
@@ -7659,7 +7671,7 @@ sub writeReportSOTXT
           while (-e $report) { $report = "$reportDir\\$reportName ($i).txt"; $i++; }
         }
         if (exists($fhReports{$object})) { $fhReport = $fhReports{$object}; } # Already open
-        elsif (open(my $fh, '>', $report)) { # Open a new report
+        elsif (open(my $fh, '>:encoding(UTF-8)', $report)) { # Open a new report
           $fhReport = $fh;
           $fhReports{$object} = $fh;
           push(@return, $report);
@@ -7720,7 +7732,7 @@ sub ExtractResults
 {
   # Local variables
   my $resFile = $$REF_ARG[3];
-	if (-f $resFile and open(my $json, $resFile)) {
+	if (-f $resFile) {
     $THR = threads->create(sub {
       $winResults->pb->Hide();
       $winResults->ChangeCursor($HOURGLASS);
@@ -7737,115 +7749,117 @@ sub ExtractResults
         my $errMsg = (split(/ at /, $_[0]))[0];
         $errMsg =~ s/[\t\r\n]/ /g;
         $winResults->ChangeCursor($ARROW);
-        Win32::GUI::MessageBox($winResults, "$STR{'errorMsg'}: $errMsg", $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($winResults, "$STR{'errorMsg'}: $errMsg", $STR{'Error'}, 0x40010);
         threads->exit();
       };
-      my $jsonText = <$json>;
-      close($json);
-      # Set Result Files grid header
-      $winResults->gridResFiles->SetCellText(0, 0, $STR{'ResStatsFiles'} );
-      $winResults->gridResFiles->SetCellText(0, 1, $STR{'Size'}          );
-      $winResults->gridResFiles->SetCellText(0, 2, $STR{'ResStatsLines'} );
-      $winResults->gridResFiles->SetCellText(0, 3, $STR{'Results'});
-      $winResults->gridResFiles->SetCellFormat(0, 0, 1); # Center column headers
-      $winResults->gridResFiles->SetCellFormat(0, 1, 1);
-      $winResults->gridResFiles->SetCellFormat(0, 2, 1);
-      $winResults->gridResFiles->SetCellFormat(0, 3, 1);
-      $winResults->gridResFiles->AutoSize();
-      $winResults->gridResFiles->ExpandColumnsToFit() if $winResults->gridResFiles->GetVirtualWidth() < $winResults->gridResFiles->Width();
-      $winResults->gridResFiles->Refresh();
-      # Load results
-      $winResults->lblCurr->Text($STR{'LoadingResults'}.'...');
-      my $jsonObj = JSON->new;
-      $refResults = $jsonObj->decode($jsonText);
-      $winResults->lblCurr->Text('');
-      # Set stats
-      my $sizeStr = &formatFileSize($$refResults{totResSize});
-      $winResults->lblResStatsFilesVal->Text($$refResults{totResFiles});
-      $winResults->lblResStatsLinesVal->Text($$refResults{totResLines});
-      $winResults->lblResStatsSizeVal->Text($sizeStr);
-      $winResults->lblResStatsDurationVal->Text(0);
-      $winResults->lblResStatsResultsVal->Text($$refResults{totResResults});
-      $winResults->btnWinReport->Enable() if $$refResults{totResResults};
-      # Feed the grid By file
-      foreach my $file (keys %{$$refResults{byFile}}) {
-        $file = encode('cp1252', $file);
-        if (my $newLine = $winResults->gridResFiles->InsertRow($file, -1)) {
-          $winResults->gridResFiles->SetCellText($newLine, 0, $file); # File path
-          $winResults->gridResFiles->SetCellFormat($newLine, 1, 2);
-          $winResults->gridResFiles->SetCellFormat($newLine, 2, 2);
-          $winResults->gridResFiles->SetCellFormat($newLine, 3, 2);
-          $winResults->gridResFiles->SetCellText($newLine, 1, $$refResults{byFile}{$file}{fileSize}  ) if $$refResults{byFile}{$file}{fileSize}; # Size
-          $winResults->gridResFiles->SetCellText($newLine, 2, $$refResults{byFile}{$file}{nbrLines}  ); # Number of lines
-          $winResults->gridResFiles->SetCellText($newLine, 3, $$refResults{byFile}{$file}{nbrResults}); # Number of results
-        }
-      }
-      $winResults->gridResFiles->Refresh();
-      $winResults->gridResFiles->AutoSize();
-      $winResults->gridResFiles->ExpandColumnsToFit() if $winResults->gridResFiles->GetVirtualWidth() < $winResults->gridResFiles->Width();
-      if (exists($$refResults{byExpr})) {
-        # Set Result Expressions grid header
-        $winResults->gridResExpr->SetColumns(5);
-        $winResults->rbResByExpr->Text($STR{'rbResByExpr'});
-        $winResults->gridResExpr->SetCellText(0, 0, $STR{'Expression'} );
-        $winResults->gridResExpr->SetCellText(0, 1, $STR{'Case'}           );
-        $winResults->gridResExpr->SetCellText(0, 2, $STR{'Regex'}          );
-        $winResults->gridResExpr->SetCellText(0, 3, $STR{'Invert'}         );
-        $winResults->gridResExpr->SetCellText(0, 4, $STR{'Results'} );
-        $winResults->gridResExpr->SetCellFormat(0, 0, 1); # Center column headers
-        $winResults->gridResExpr->SetCellFormat(0, 1, 1);
-        $winResults->gridResExpr->SetCellFormat(0, 2, 1);
-        $winResults->gridResExpr->SetCellFormat(0, 3, 1);
-        $winResults->gridResExpr->SetCellFormat(0, 4, 1);
-        # Feed the grid By expression
-        foreach my $expr (keys %{$$refResults{byExpr}}) {
-          if (my $newLine = $winResults->gridResExpr->InsertRow($expr, -1)) {
-            $winResults->gridResExpr->SetCellText($newLine, 0, $expr);
-            $winResults->gridResExpr->SetCellType($newLine, 1, 4);
-            $winResults->gridResExpr->SetCellType($newLine, 2, 4);
-            $winResults->gridResExpr->SetCellType($newLine, 3, 4);
-            if ($$refResults{byExpr}{$expr}{case})   { $winResults->gridResExpr->SetCellCheck($newLine, 1, 1); }
-            else                                     { $winResults->gridResExpr->SetCellCheck($newLine, 1, 0); }
-            if ($$refResults{byExpr}{$expr}{regex})  { $winResults->gridResExpr->SetCellCheck($newLine, 2, 1); }
-            else                                     { $winResults->gridResExpr->SetCellCheck($newLine, 2, 0); }
-            if ($$refResults{byExpr}{$expr}{invert}) { $winResults->gridResExpr->SetCellCheck($newLine, 3, 1); }
-            else                                     { $winResults->gridResExpr->SetCellCheck($newLine, 3, 0); }
-            $winResults->gridResExpr->SetCellText($newLine, 4, $$refResults{byExpr}{$expr}{nbrRes});
+      if (open(my $json, $resFile)) {
+        my $jsonText = <$json>;
+        close($json);
+        # Set Result Files grid header
+        $winResults->gridResFiles->SetCellText(0, 0, $STR{'ResStatsFiles'} );
+        $winResults->gridResFiles->SetCellText(0, 1, $STR{'Size'}          );
+        $winResults->gridResFiles->SetCellText(0, 2, $STR{'ResStatsLines'} );
+        $winResults->gridResFiles->SetCellText(0, 3, $STR{'Results'});
+        $winResults->gridResFiles->SetCellFormat(0, 0, 1); # Center column headers
+        $winResults->gridResFiles->SetCellFormat(0, 1, 1);
+        $winResults->gridResFiles->SetCellFormat(0, 2, 1);
+        $winResults->gridResFiles->SetCellFormat(0, 3, 1);
+        $winResults->gridResFiles->AutoSize();
+        $winResults->gridResFiles->ExpandColumnsToFit() if $winResults->gridResFiles->GetVirtualWidth() < $winResults->gridResFiles->Width();
+        $winResults->gridResFiles->Refresh();
+        # Load results
+        $winResults->lblCurr->Text($STR{'LoadingResults'}.'...');
+        my $jsonObj = JSON->new;
+        $refResults = $jsonObj->decode($jsonText);
+        $winResults->lblCurr->Text('');
+        # Set stats
+        my $sizeStr = &formatFileSize($$refResults{totResSize});
+        $winResults->lblResStatsFilesVal->Text($$refResults{totResFiles});
+        $winResults->lblResStatsLinesVal->Text($$refResults{totResLines});
+        $winResults->lblResStatsSizeVal->Text($sizeStr);
+        $winResults->lblResStatsDurationVal->Text(0);
+        $winResults->lblResStatsResultsVal->Text($$refResults{totResResults});
+        $winResults->btnWinReport->Enable() if $$refResults{totResResults};
+        # Feed the grid By file
+        foreach my $file (keys %{$$refResults{byFile}}) {
+          $file = encode('cp1252', $file);
+          if (my $newLine = $winResults->gridResFiles->InsertRow($file, -1)) {
+            $winResults->gridResFiles->SetCellText($newLine, 0, $file); # File path
+            $winResults->gridResFiles->SetCellFormat($newLine, 1, 2);
+            $winResults->gridResFiles->SetCellFormat($newLine, 2, 2);
+            $winResults->gridResFiles->SetCellFormat($newLine, 3, 2);
+            $winResults->gridResFiles->SetCellText($newLine, 1, $$refResults{byFile}{$file}{fileSize}  ) if $$refResults{byFile}{$file}{fileSize}; # Size
+            $winResults->gridResFiles->SetCellText($newLine, 2, $$refResults{byFile}{$file}{nbrLines}  ); # Number of lines
+            $winResults->gridResFiles->SetCellText($newLine, 3, $$refResults{byFile}{$file}{nbrResults}); # Number of results
           }
         }
-      } elsif (exists($$refResults{bySO})) {
-        # Set Result Objects grid header
-        $winResults->gridResExpr->SetColumns(3);
-        $winResults->rbResByExpr->Text($STR{'rbResByObject'});
-        $winResults->gridResExpr->SetCellText(0, 0, $STR{'Object'});
-        $winResults->gridResExpr->SetCellText(0, 1, $STR{'Results'});
-        $winResults->gridResExpr->SetCellText(0, 2, $STR{'Options'});
-        $winResults->gridResExpr->SetCellFormat(0, 0, 1); # Center column headers
-        $winResults->gridResExpr->SetCellFormat(0, 1, 1);
-        $winResults->gridResExpr->SetCellFormat(0, 2, 1);
-        # Feed the grid By Special Objects
-        foreach my $object (keys %{$$refResults{bySO}}) {
-          if (my $newLine = $winResults->gridResExpr->InsertRow($object, -1)) {
-            $winResults->gridResExpr->SetCellText($newLine, 0, $object);
-            $winResults->gridResExpr->SetCellText($newLine, 1, $$refResults{bySO}{$object}{nbrRes});
-            my $optionStr;
-            if (scalar(keys %{$$refResults{SO}{$object}{options}})) {
-              foreach my $opt (keys %{$$refResults{SO}{$object}{options}}) { $optionStr .= $opt . ","; }
-              chop($optionStr);
-              $winResults->gridResExpr->SetCellText($newLine, 2, $optionStr) if $optionStr;
+        $winResults->gridResFiles->Refresh();
+        $winResults->gridResFiles->AutoSize();
+        $winResults->gridResFiles->ExpandColumnsToFit() if $winResults->gridResFiles->GetVirtualWidth() < $winResults->gridResFiles->Width();
+        if (exists($$refResults{byExpr})) {
+          # Set Result Expressions grid header
+          $winResults->gridResExpr->SetColumns(5);
+          $winResults->rbResByExpr->Text($STR{'rbResByExpr'});
+          $winResults->gridResExpr->SetCellText(0, 0, $STR{'Expression'} );
+          $winResults->gridResExpr->SetCellText(0, 1, $STR{'Case'}           );
+          $winResults->gridResExpr->SetCellText(0, 2, $STR{'Regex'}          );
+          $winResults->gridResExpr->SetCellText(0, 3, $STR{'Invert'}         );
+          $winResults->gridResExpr->SetCellText(0, 4, $STR{'Results'} );
+          $winResults->gridResExpr->SetCellFormat(0, 0, 1); # Center column headers
+          $winResults->gridResExpr->SetCellFormat(0, 1, 1);
+          $winResults->gridResExpr->SetCellFormat(0, 2, 1);
+          $winResults->gridResExpr->SetCellFormat(0, 3, 1);
+          $winResults->gridResExpr->SetCellFormat(0, 4, 1);
+          # Feed the grid By expression
+          foreach my $expr (keys %{$$refResults{byExpr}}) {
+            if (my $newLine = $winResults->gridResExpr->InsertRow($expr, -1)) {
+              $winResults->gridResExpr->SetCellText($newLine, 0, $expr);
+              $winResults->gridResExpr->SetCellType($newLine, 1, 4);
+              $winResults->gridResExpr->SetCellType($newLine, 2, 4);
+              $winResults->gridResExpr->SetCellType($newLine, 3, 4);
+              if ($$refResults{byExpr}{$expr}{case})   { $winResults->gridResExpr->SetCellCheck($newLine, 1, 1); }
+              else                                     { $winResults->gridResExpr->SetCellCheck($newLine, 1, 0); }
+              if ($$refResults{byExpr}{$expr}{regex})  { $winResults->gridResExpr->SetCellCheck($newLine, 2, 1); }
+              else                                     { $winResults->gridResExpr->SetCellCheck($newLine, 2, 0); }
+              if ($$refResults{byExpr}{$expr}{invert}) { $winResults->gridResExpr->SetCellCheck($newLine, 3, 1); }
+              else                                     { $winResults->gridResExpr->SetCellCheck($newLine, 3, 0); }
+              $winResults->gridResExpr->SetCellText($newLine, 4, $$refResults{byExpr}{$expr}{nbrRes});
+            }
+          }
+        } elsif (exists($$refResults{bySO})) {
+          # Set Result Objects grid header
+          $winResults->gridResExpr->SetColumns(3);
+          $winResults->rbResByExpr->Text($STR{'rbResByObject'});
+          $winResults->gridResExpr->SetCellText(0, 0, $STR{'Object'});
+          $winResults->gridResExpr->SetCellText(0, 1, $STR{'Results'});
+          $winResults->gridResExpr->SetCellText(0, 2, $STR{'Options'});
+          $winResults->gridResExpr->SetCellFormat(0, 0, 1); # Center column headers
+          $winResults->gridResExpr->SetCellFormat(0, 1, 1);
+          $winResults->gridResExpr->SetCellFormat(0, 2, 1);
+          # Feed the grid By Special Objects
+          foreach my $object (keys %{$$refResults{bySO}}) {
+            if (my $newLine = $winResults->gridResExpr->InsertRow($object, -1)) {
+              $winResults->gridResExpr->SetCellText($newLine, 0, $object);
+              $winResults->gridResExpr->SetCellText($newLine, 1, $$refResults{bySO}{$object}{nbrRes});
+              my $optionStr;
+              if (scalar(keys %{$$refResults{SO}{$object}{options}})) {
+                foreach my $opt (keys %{$$refResults{SO}{$object}{options}}) { $optionStr .= $opt . ","; }
+                chop($optionStr);
+                $winResults->gridResExpr->SetCellText($newLine, 2, $optionStr) if $optionStr;
+              }
             }
           }
         }
-      }
-      $winResults->gridResExpr->Refresh();
-      $winResults->gridResExpr->AutoSize();
-      $winResults->gridResExpr->ExpandColumnsToFit() if $winResults->gridResExpr->GetVirtualWidth() < $winResults->gridResExpr->Width();
-      # Copy tmp results
-      if ($resFile =~ /(.+?)\.json$/) {
-        my $tmpSavedResult1 = $1 . '.XL-Parser_tmp.txt';
-        my $tmpSavedResult2 = $1 . '.XL-Parser_tmp2.txt';
-        Win32::CopyFile($tmpSavedResult1, "$REPORTDIR\\.XL-Parser_tmp-"  . $PROCESSID .'.txt' , 0) if -f $tmpSavedResult1;
-        Win32::CopyFile($tmpSavedResult2, "$REPORTDIR\\.XL-Parser_tmp2-" . $PROCESSID .'.txt' , 0) if -f $tmpSavedResult2;
+        $winResults->gridResExpr->Refresh();
+        $winResults->gridResExpr->AutoSize();
+        $winResults->gridResExpr->ExpandColumnsToFit() if $winResults->gridResExpr->GetVirtualWidth() < $winResults->gridResExpr->Width();
+        # Copy tmp results
+        if ($resFile =~ /(.+?)\.json$/) {
+          my $tmpSavedResult1 = $1 . '.XL-Parser_tmp.txt';
+          my $tmpSavedResult2 = $1 . '.XL-Parser_tmp2.txt';
+          Win32::CopyFile($tmpSavedResult1, "$REPORTDIR\\.XL-Parser_tmp-"  . $PROCESSID .'.txt' , 0) if -f $tmpSavedResult1;
+          Win32::CopyFile($tmpSavedResult2, "$REPORTDIR\\.XL-Parser_tmp2-" . $PROCESSID .'.txt' , 0) if -f $tmpSavedResult2;
+        }
       }
       $winResults->btnCancelExtract->Hide();
       $winResults->btnCloseWinResults->Show();
@@ -7879,7 +7893,7 @@ sub queryDB
         # Finish statement handle and disconnect database
         undef $dbh;
         $winPb->ChangeCursor($ARROW);
-        Win32::GUI::MessageBox($winPb, "$STR{'errorMsg'}: $errMsg", $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($winPb, "$STR{'errorMsg'}: $errMsg", $STR{'Error'}, 0x40010);
         threads->exit();
       };
       $winPb->ChangeCursor($HOURGLASS);
@@ -7927,7 +7941,7 @@ sub queryDB
         eval { $sth = $dbh->prepare($$refQueryParams{query}); };
         if ($@) {
           my $errMsg = (split(/ at /,$@))[0];
-          Win32::GUI::MessageBox($winPb, $errMsg , $STR{'error'}, 0x40010);
+          Win32::GUI::MessageBox($winPb, $errMsg , $STR{'Error'}, 0x40010);
         } else {
           # Set progress
           $winPb->pb->SetRange(0, 1);
@@ -7991,8 +8005,8 @@ sub writeQueryDBResultXLSX
                 push(@maxColWidth, length($STR{'isp'})+10); $j++;
               }
               if ($$refQueryParams{incGeoIP}) {
-                $sheet->write(0, $j, $STR{'GeoIPDB'}, $formatHeader );
-                push(@maxColWidth, length($STR{'GeoIPDB'})+10); $j++;
+                $sheet->write(0, $j, $STR{'GeoIP'}, $formatHeader );
+                push(@maxColWidth, length($STR{'GeoIP'})+10); $j++;
               }
             } elsif ($$refColumnNames[$countCol] eq 'useragent' and $$refQueryParams{incUADetails}) {
               $sheet->write(0, $j, $$refColumnNameStr{$_}, $formatHeader );
@@ -8136,8 +8150,8 @@ sub writeQueryDBResultHTML
                       $$refColumnNames[$countCol] ne 'timeOfDay')) {
           if ($$refColumnNames[$countCol] eq 'remoteIP' and ($$refQueryParams{incISP} or $$refQueryParams{incGeoIP})) {
             push(@headers, $$refColumnNameStr{$_});
-            push(@headers, $STR{'isp'}    ) if $$refQueryParams{incISP};
-            push(@headers, $STR{'GeoIPDB'}) if $$refQueryParams{incGeoIP};
+            push(@headers, $STR{'isp'}  ) if $$refQueryParams{incISP};
+            push(@headers, $STR{'GeoIP'}) if $$refQueryParams{incGeoIP};
           } elsif ($$refColumnNames[$countCol] eq 'useragent' and $$refQueryParams{incUADetails}) {
             push(@headers, $$refColumnNameStr{$_});
             push(@headers, $STR{'Type'});
@@ -8155,7 +8169,7 @@ sub writeQueryDBResultHTML
         $countCol++;
       }
     }
-    &createReportHTML($fhQueryRes, \@headers);
+    &createReportHTML($fhQueryRes, \@headers, 'cp1252');
     $$refSth->execute();
     my $countRow = 0;
     while (my $refEntryFields = $$refSth->fetchrow_arrayref()) {
@@ -8221,8 +8235,8 @@ sub writeQueryDBResultTXT
                       $$refColumnNames[$countCol] ne 'timeOfDay')) {
           if ($$refColumnNames[$countCol] eq 'remoteIP' and ($$refQueryParams{incISP} or $$refQueryParams{incGeoIP})) {
             $header .= $$refColumnNameStr{$_}."\t";
-            $header .= $STR{'isp'}    ."\t" if $$refQueryParams{incISP};
-            $header .= $STR{'GeoIPDB'}."\t" if $$refQueryParams{incGeoIP};
+            $header .= $STR{'isp'}  ."\t" if $$refQueryParams{incISP};
+            $header .= $STR{'GeoIP'}."\t" if $$refQueryParams{incGeoIP};
           } elsif ($$refColumnNames[$countCol] eq 'useragent' and $$refQueryParams{incUADetails}) {
             $header .= $$refColumnNameStr{$_}."\t";
             $header .= $STR{'Type'}."\t".$STR{'uaOS'}."\t".$STR{'uaBrowser'}."\t".$STR{'uaDevice'}."\t".$STR{'uaLang'}."\t";
@@ -8289,10 +8303,10 @@ sub createReportHTML
 #--------------------------#
 {
   # Local variables
-  my ($fhReport, $refHeaders) = @_;
+  my ($fhReport, $refHeaders, $charset) = @_;
   print $fhReport "<!DOCTYPE html>\n";
   print $fhReport "<html>\n<head>\n<title>XL-Parser $STR{'report'}</title>\n";
-  print $fhReport "<meta charset=\"ISO-8859-1\">\n<style>\n";
+  print $fhReport "<meta charset=\"$charset\">\n<style>\n";
   print $fhReport "<meta name=\"generator\" content=\"XL-Parser $VERSION\">\n";
   print $fhReport "table, td { border-collapse: collapse; border: 1px solid black; padding: 5px; }\n";
   print $fhReport "td { font-size:11pt; vertical-align: top; white-space: nowrap; }\n";
@@ -8333,7 +8347,7 @@ sub searchDB
         # Finish statement handle and disconnect database
         undef $dbh;
         $winPb->ChangeCursor($ARROW);
-        Win32::GUI::MessageBox($winPb, "$STR{'errorMsg'}: $errMsg", $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($winPb, "$STR{'errorMsg'}: $errMsg", $STR{'Error'}, 0x40010);
         threads->exit();
       };
       $winPb->ChangeCursor($HOURGLASS);
@@ -8386,9 +8400,11 @@ sub searchDB
           $avgLengthParams  = $minLength if !$avgLengthParams;
           my $SQLQuery;
           $SQLQuery = 'SELECT remoteIP,COUNT(remoteIP) AS number FROM (SELECT id,remoteIP,length(http_request) AS length ' .
-                      'FROM LOG GROUP BY remoteIP,length HAVING length > ' . $avgLengthRequest . ' UNION SELECT id,remoteIP,length(http_params) ' .
-                      'AS length FROM LOG GROUP BY remoteIP,length HAVING length > ' . $avgLengthParams . ') GROUP BY remoteIP ' .
-                      'ORDER BY number DESC LIMIT ' . $$refSearchParams{selIndicators}{$indicator}{limit};
+                      'FROM LOG GROUP BY remoteIP,datetimeInt,http_request,length HAVING length > ' . $avgLengthRequest .
+                      ' UNION SELECT id,remoteIP,length(http_params) ' .
+                      'AS length FROM LOG GROUP BY remoteIP,datetimeInt,http_request,length HAVING length > ' . $avgLengthParams .
+                      ') GROUP BY remoteIP ORDER BY number DESC LIMIT ' .
+                      $$refSearchParams{selIndicators}{$indicator}{limit};
           $sth = $dbh->prepare($SQLQuery);
           $sth->execute();
           my $index = 0;
@@ -8728,8 +8744,8 @@ sub searchDB
       $winSearchSA->gridResultsSA_IPs->SetCellText(0, 1, $STR{'LFclientIP'});
       $winSearchSA->gridResultsSA_IPs->SetCellText(0, 2, $STR{'Score'} );
       my $j = 3;
-      if ($$refSearchParams{incISP}  ) { $winSearchSA->gridResultsSA_IPs->SetCellText(0, $j, $STR{'isp'}    ); $j++; }
-      if ($$refSearchParams{incGeoIP}) { $winSearchSA->gridResultsSA_IPs->SetCellText(0, $j, $STR{'GeoIPDB'}); $j++; }
+      if ($$refSearchParams{incISP}  ) { $winSearchSA->gridResultsSA_IPs->SetCellText(0, $j, $STR{'isp'}  ); $j++; }
+      if ($$refSearchParams{incGeoIP}) { $winSearchSA->gridResultsSA_IPs->SetCellText(0, $j, $STR{'GeoIP'}); $j++; }
       my %columnNames;
       foreach my $indicator (sort { $$refSearchParams{selIndicators}{$b}{score} <=> $$refSearchParams{selIndicators}{$a}{score} } keys %{$$refSearchParams{selIndicators}}) {
         if ($indicator ne $STR{'Indicator'}) {
@@ -8928,7 +8944,7 @@ sub btnLASearchSA_SaveRes_Click
         $winPb->pb->Hide();
         $winPb->Hide();
         $winPb->ChangeCursor($ARROW);
-        Win32::GUI::MessageBox($winSearchSA, "$STR{'errorMsg'}: $errMsg", $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($winSearchSA, "$STR{'errorMsg'}: $errMsg", $STR{'Error'}, 0x40010);
         threads->exit();
       };
       # Progress
@@ -9187,8 +9203,8 @@ sub SA_ResIPs_Click
     $winSearchSA->gridResultsSA_IPs->SetCellFormat(0, 3, 1);
   }
   # Insert GeoIP column if doesn't exist
-  if (!exists($headers{$STR{'GeoIPDB'}})) {
-    $winSearchSA->gridResultsSA_IPs->InsertColumn($STR{'GeoIPDB'}, 0, 4);
+  if (!exists($headers{$STR{'GeoIP'}})) {
+    $winSearchSA->gridResultsSA_IPs->InsertColumn($STR{'GeoIP'}, 0, 4);
     $winSearchSA->gridResultsSA_IPs->SetCellFormat(0, 4, 1);
   }
   # Populate new columns
@@ -9208,12 +9224,13 @@ sub SA_ResIPs_Click
       };
       # Thread 'die' signal handler
       $SIG{__DIE__} = sub {
+        return if $_ and $_->isa('GeoIP2::Error');
         my $errMsg = (split(/ at /, $_[0]))[0];
         $errMsg =~ s/[\t\r\n]/ /g;
         # Finish statement handle and disconnect database
         $dbhWhoisDB = undef;
         $winSearchSA->ChangeCursor($ARROW);
-        Win32::GUI::MessageBox($winPb, "$STR{'errorMsg'}: $errMsg", $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($winPb, "$STR{'errorMsg'}: $errMsg", $STR{'Error'}, 0x40010);
         threads->exit();
       };
       $winSearchSA->ChangeCursor($HOURGLASS);
@@ -9222,11 +9239,12 @@ sub SA_ResIPs_Click
       my $jsonObj = JSON->new;
       $refSearchParams = $jsonObj->decode($jsonText);
       # Open and load config values
-      my ($XLWHOIS_DB_FILE, $GEOIP_DB_FILE);
+      my ($XLWHOIS_DB_FILE, $GEOIP_DB_FILE, $GEOIP_LANG);
       if (open(CONFIG, "$USERDIR\\XL-Parser.ini")) {
         while (<CONFIG>) {
           if    (/^XLWHOIS_DB_FILE = ([^\n]+)/) { $XLWHOIS_DB_FILE = $1; }
           elsif (/^GEOIP_DB_FILE = ([^\n]+)/  ) { $GEOIP_DB_FILE   = $1; }
+          elsif (/^GEOIP_LANG = ([^\n]+)/     ) { $GEOIP_LANG      = $1; }
         }
         close(CONFIG);
       }
@@ -9237,8 +9255,7 @@ sub SA_ResIPs_Click
         $dbhWhoisDB = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 });
       }
       # Connect to GeoIP Database
-      my $geoIPDB;
-      $geoIPDB = Geo::IP->open($GEOIP_DB_FILE, GEOIP_MEMORY_CACHE) if $GEOIP_DB_FILE;
+      my $readerGeoIP = GeoIP2::Database::Reader->new(file => $GEOIP_DB_FILE, locales => [$GEOIP_LANG, 'en']) if $GEOIP_DB_FILE;
       for (my $i = 1; $i < $winSearchSA->gridResultsSA_IPs->GetRows(); $i++) {
         my $ip = $winSearchSA->gridResultsSA_IPs->GetCellText($i, 1);
         if ($dbhWhoisDB) { # Resolve ISP
@@ -9246,9 +9263,10 @@ sub SA_ResIPs_Click
           $isp = 'unknown' if !$isp;
           $winSearchSA->gridResultsSA_IPs->SetCellText($i, 3, $isp  );
         }
-        if ($geoIPDB) { # Resolve GeoIP
-          my $geoIP = &resolveGeoIP($ip, \$geoIPDB);
+        if ($readerGeoIP) { # Resolve GeoIP
+          my $geoIP = &resolveGeoIP($ip, \$readerGeoIP);
           $geoIP = 'unknown' if !$geoIP;
+          $geoIP = encode('cp1252', $geoIP);
           $winSearchSA->gridResultsSA_IPs->SetCellText($i, 4, $geoIP);
         }
       }
@@ -9453,7 +9471,7 @@ sub SAResults
         my $errMsg = (split(/ at /, $_[0]))[0];
         $errMsg =~ s/[\t\r\n]/ /g;
         undef $dbh;
-        Win32::GUI::MessageBox($winSearchSA, "$STR{'errorMsg'}: $errMsg", $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($winSearchSA, "$STR{'errorMsg'}: $errMsg", $STR{'Error'}, 0x40010);
         threads->exit();
       };
       my $jsonText = <$json>;
@@ -9470,8 +9488,8 @@ sub SAResults
       $winSearchSA->gridResultsSA_IPs->SetCellText(0, 1, $STR{'LFclientIP'});
       $winSearchSA->gridResultsSA_IPs->SetCellText(0, 2, $STR{'Score'} );
       my $j = 3;
-      if ($$refResults{incISP}  ) { $winSearchSA->gridResultsSA_IPs->SetCellText(0, $j, $STR{'isp'}    ); $j++; }
-      if ($$refResults{incGeoIP}) { $winSearchSA->gridResultsSA_IPs->SetCellText(0, $j, $STR{'GeoIPDB'}); $j++; }
+      if ($$refResults{incISP}  ) { $winSearchSA->gridResultsSA_IPs->SetCellText(0, $j, $STR{'isp'}  ); $j++; }
+      if ($$refResults{incGeoIP}) { $winSearchSA->gridResultsSA_IPs->SetCellText(0, $j, $STR{'GeoIP'}); $j++; }
       my %columnNames;
       foreach my $indicator (sort keys %{$$refResults{selIndicators}}) {
         if ($indicator ne $STR{'Indicator'}) {
@@ -9583,8 +9601,7 @@ sub createLADB
   my $destDB = encode('cp1252', $$REF_ARG[3]);
   if ($destDB and $destDB =~ /\.db/) {
     $THR = threads->create(sub {
-      my ($nbrLogEntries, $id, $dbhWhoisDB, $geoIPDB, $XLWHOIS_DB_FILE, $GEOIP_DB_FILE);
-      my $refDbh;
+      my ($nbrLogEntries, $id, $dbhWhoisDB, $readerGeoIP, $XLWHOIS_DB_FILE, $GEOIP_DB_FILE, $GEOIP_LANG, $refDbh);
       my %fileINFO;
       my %databaseINFO;
       # Thread 'cancellation' signal handler
@@ -9606,12 +9623,13 @@ sub createLADB
       };
       # Thread 'die' signal handler
       $SIG{__DIE__} = sub {
-        die @_ if $_[0] =~ /Parse\/HTTP\/UserAgent/;
+        return if $_ and $_->isa('GeoIP2::Error');
+        die @_ if $_ and $_[0] =~ /Parse\/HTTP\/UserAgent/;
         my $errMsg = (split(/ at /, $_[0]))[0];
         $errMsg =~ s/[\t\r\n]/ /g;
         undef $$refDbh if $refDbh;
         $winAdvPb->ChangeCursor($ARROW);
-        Win32::GUI::MessageBox($winAdvPb, "$STR{'errorMsg'}: $errMsg", $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($winAdvPb, "$STR{'errorMsg'}: $errMsg", $STR{'Error'}, 0x40010);
         threads->exit();
       };
       if ($refDbh = &validLADB($destDB)) {
@@ -9649,6 +9667,7 @@ sub createLADB
           while (<CONFIG>) {
             if    (/^XLWHOIS_DB_FILE = ([^\n]+)/) { $XLWHOIS_DB_FILE = $1; }
             elsif (/^GEOIP_DB_FILE = ([^\n]+)/  ) { $GEOIP_DB_FILE   = $1; }
+            elsif (/^GEOIP_LANG = ([^\n]+)/     ) { $GEOIP_LANG      = $1; }
           }
           close(CONFIG);
           if ($databaseINFO{filterISP} and $XLWHOIS_DB_FILE) { # Connect to XL-Whois Database
@@ -9657,7 +9676,7 @@ sub createLADB
             $dbhWhoisDB = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 });
           }
           if ($databaseINFO{filterGeoIP} and $GEOIP_DB_FILE) { # Connect to GeoIP Database
-            $geoIPDB = Geo::IP->open($GEOIP_DB_FILE, GEOIP_MEMORY_CACHE);
+            $readerGeoIP = GeoIP2::Database::Reader->new(file => $GEOIP_DB_FILE, locales => [$GEOIP_LANG, 'en']);
           }
         }
         # Get Filters
@@ -9792,11 +9811,11 @@ sub createLADB
               if ($databaseINFO{nbrFilterSets}) { # With filters
                 &createLADBParseFileF($$refFile[1], $refDbh, \$sth, $countLines, $startByLine, \$totalLines, \$totalLinesLeft,
                                       \$totalSize, \$currTotalLines, $startTime, \$id, \$nbrLogEntries, \%fileINFO, $refFilterSets,
-                                      \%hashLFRE, $dbFile, \%fieldOrder, \%databaseINFO, \$dbhWhoisDB, \$geoIPDB);
+                                      \%hashLFRE, $dbFile, \%fieldOrder, \%databaseINFO, \$dbhWhoisDB, \$readerGeoIP);
               } else { # No Filter
                 &createLADBParseFile($$refFile[1], $refDbh, \$sth, $countLines, $startByLine, \$totalLines, \$totalLinesLeft,
                                      \$totalSize, \$currTotalLines, $startTime, \$id, \$nbrLogEntries, \%fileINFO, \%hashLFRE,
-                                     $dbFile, \%fieldOrder, \%databaseINFO, \$dbhWhoisDB, \$geoIPDB);
+                                     $dbFile, \%fieldOrder, \%databaseINFO, \$dbhWhoisDB, \$readerGeoIP);
               }
             }
             $countFiles++;
@@ -9806,6 +9825,15 @@ sub createLADB
           }
         }
         $sthFiles->finish();
+        # Update INFO table
+        $databaseINFO{parsedSize}     = $totalSize;
+        $databaseINFO{parsedLines}    = $totalLines;
+        $databaseINFO{lastEndryId}    = ($id - 1);
+        $databaseINFO{nbrLogEntries}  = $nbrLogEntries;
+        $databaseINFO{lastUpdateTime} = time;
+        $databaseINFO{version}        = $VERSION;
+        &updateLADB_INFO($refDbh, \%databaseINFO);
+        $$refDbh->commit();
         if ($databaseINFO{resISP} or $databaseINFO{resGeoIP} or $databaseINFO{resUA}) {
           $winAdvPb->lblCount1->Text('');
           my $nbrTask = 0;
@@ -9843,12 +9871,7 @@ sub createLADB
           }
         }
         # Update INFO table
-        $databaseINFO{parsedSize}     = $totalSize;
-        $databaseINFO{parsedLines}    = $totalLines;
-        $databaseINFO{lastEndryId}    = ($id - 1);
-        $databaseINFO{nbrLogEntries}  = $nbrLogEntries;
         $databaseINFO{lastUpdateTime} = time;
-        $databaseINFO{version}        = $VERSION;
         &updateLADB_INFO($refDbh, \%databaseINFO);
         $$refDbh->commit();
         # Update progress window
@@ -9874,8 +9897,8 @@ sub createLADB
         $dbhWhoisDB->disconnect() if $dbhWhoisDB;
         # Delete empty files
         unlink("$dbDir\\CurrentProjectSelFilters-" . $PROCESSID .'.json') if "$dbDir\\CurrentProjectSelFilters-" . $PROCESSID .'.json';
-        unlink("$dbFile.RejectedLines.log")             if -e "$dbFile.RejectedLines.log" and -z "$dbFile.RejectedLines.log";
-        unlink("$dbFile.FilteredLines.log")             if -e "$dbFile.FilteredLines.log" and -z "$dbFile.FilteredLines.log";
+        unlink("$dbFile.RejectedLines.log")  if -e "$dbFile.RejectedLines.log" and -z "$dbFile.RejectedLines.log";
+        unlink("$dbFile.FilteredLines.log")  if -e "$dbFile.FilteredLines.log" and -z "$dbFile.FilteredLines.log";
       }
     });
   }
@@ -10134,6 +10157,7 @@ sub createLADBParseFileF
                 if ($$refDatabaseINFO{filterGeoIP} and $$refGeoIPDB) { # Resolve GeoIP before filtering
                   $newEntry{geoIP} = &resolveGeoIP($newEntry{remoteIP}, $refGeoIPDB);
                   $newEntry{geoIP} = 'unknown' if !$newEntry{geoIP};
+                  $newEntry{geoIP} = encode('cp1252', $newEntry{geoIP});
                 }
               }
               # Resolve Useragent before filtering
@@ -10275,7 +10299,8 @@ sub updateLADB
       };
       # Thread 'die' signal handler
       $SIG{__DIE__} = sub {
-        die @_ if $_[0] =~ /Parse\/HTTP\/UserAgent/;
+        return if $_ and $_->isa('GeoIP2::Error');
+        die @_ if $_ and $_[0] =~ /Parse\/HTTP\/UserAgent/;
         my $errMsg = (split(/ at /, $_[0]))[0];
         $errMsg =~ s/[\t\r\n]/ /g;
         # Update INFO table
@@ -10285,7 +10310,7 @@ sub updateLADB
         # Finish statement handle and disconnect database
         undef $dbh;
         $winAdvPb->ChangeCursor($ARROW);
-        Win32::GUI::MessageBox($winAdvPb, "$STR{'errorMsg'}: $errMsg", $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($winAdvPb, "$STR{'errorMsg'}: $errMsg", $STR{'Error'}, 0x40010);
         threads->exit();
       };
       $winAdvPb->ChangeCursor($HOURGLASS);
@@ -10512,7 +10537,7 @@ sub updateLADB
         unlink("$REPORTDIR\\CurrentUpdateParams-" . $PROCESSID .'.json')      if -e "$REPORTDIR\\CurrentUpdateParams-" . $PROCESSID .'.json';
         unlink("$REPORTDIR\\CurrentProjectSelFilters-" . $PROCESSID .'.json') if -e "$REPORTDIR\\CurrentProjectSelFilters-" . $PROCESSID .'.json';
       # Error copying database
-      } else { Win32::GUI::MessageBox($winResults, "$STR{'errorCopying'} $STR{'rbInputDatabase'}: $copyMsg", $STR{'error'}, 0x40010); }
+      } else { Win32::GUI::MessageBox($winResults, "$STR{'errorCopying'} $STR{'rbInputDatabase'}: $copyMsg", $STR{'Error'}, 0x40010); }
     });
   }
   
@@ -10524,12 +10549,13 @@ sub resISPGeoIP_DB
 {
   # Local variables
   my ($refDbh, $resISP, $resGeoIP, $USERDIR, $startTime) = @_;
-  my ($dbhWhoisDB, $geoIPDB, $XLWHOIS_DB_FILE, $GEOIP_DB_FILE);
+  my ($dbhWhoisDB, $readerGeoIP, $XLWHOIS_DB_FILE, $GEOIP_DB_FILE, $GEOIP_LANG);
   # Open and load config values
   if (open(CONFIG, "$USERDIR\\XL-Parser.ini")) {
     while (<CONFIG>) {
       if    (/^XLWHOIS_DB_FILE = ([^\n]+)/) { $XLWHOIS_DB_FILE = $1; }
       elsif (/^GEOIP_DB_FILE = ([^\n]+)/  ) { $GEOIP_DB_FILE   = $1; }
+      elsif (/^GEOIP_LANG = ([^\n]+)/     ) { $GEOIP_LANG      = $1; }
     }
     close(CONFIG);
     # Connect to XL-Whois Database
@@ -10538,15 +10564,15 @@ sub resISPGeoIP_DB
       my $dsn          = "DBI:SQLite:dbname=$XLWHOIS_DB_FILE";
       if ($dbhWhoisDB = DBI->connect($dsn, undef, undef, { RaiseError => 1 })) {}
       else {
-        Win32::GUI::MessageBox($winAdvPb, $STR{'errorConnectDB'} . ' (XL-Whois DB)', $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($winAdvPb, $STR{'errorConnectDB'} . ' (XL-Whois DB)', $STR{'Error'}, 0x40010);
         return(0);
       }
     }
     # Connect to GeoIP Database
     if ($resGeoIP) {
-      if ($geoIPDB = Geo::IP->open($GEOIP_DB_FILE, GEOIP_MEMORY_CACHE)) {}
+      if ($readerGeoIP = GeoIP2::Database::Reader->new(file => $GEOIP_DB_FILE, locales => [$GEOIP_LANG, 'en'])) {}
       else {
-        Win32::GUI::MessageBox($winAdvPb, $STR{'errorConnectDB'} . ' (GeoIP)', $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($winAdvPb, $STR{'errorConnectDB'} . ' (GeoIP)', $STR{'Error'}, 0x40010);
         return(0);
       }
     }
@@ -10584,9 +10610,10 @@ sub resISPGeoIP_DB
       $nbrResISP++;
       $winAdvPb->lblResStatsResISPVal->Text($nbrResISP);
     }
-    if ($resGeoIP and $geoIPDB) { # Resolve GeoIP ?
-      $geoIP = &resolveGeoIP($$refEntryFields[0], \$geoIPDB);
+    if ($resGeoIP and $readerGeoIP) { # Resolve GeoIP ?
+      $geoIP = &resolveGeoIP($$refEntryFields[0], \$readerGeoIP);
       $geoIP = 'unknown' if !$geoIP;
+      $geoIP = encode('cp1252', $geoIP);
       $nbrResGeoIP++;
       $winAdvPb->lblResStatsResGeoIPVal->Text($nbrResGeoIP);
     }
@@ -10965,7 +10992,7 @@ sub testFieldFilter
     elsif ($field eq $STR{'LFReferer'}   and $$refNewEntry{referer}      ) { $valueInLog = $$refNewEntry{referer};       }
     elsif ($field eq $STR{'LFUA'}        and $$refNewEntry{useragent}    ) { $valueInLog = $$refNewEntry{useragent};     }
     if    ($field eq $STR{'isp'}         and $$refNewEntry{isp}          ) { $valueInLog = $$refNewEntry{isp};           }
-    if    ($field eq $STR{'GeoIPDB'}     and $$refNewEntry{GeoIPDB}      ) { $valueInLog = $$refNewEntry{GeoIPDB};       }
+    if    ($field eq $STR{'GeoIP'}       and $$refNewEntry{GeoIPDB}      ) { $valueInLog = $$refNewEntry{GeoIPDB};       }
     elsif ($field eq $STR{'LFUA-t'}      and $$refNewEntry{type}         ) { $valueInLog = $$refNewEntry{type};          }
     elsif ($field eq $STR{'LFUA-os'}     and $$refNewEntry{os}           ) { $valueInLog = $$refNewEntry{os};            }
     elsif ($field eq $STR{'LFUA-b'}      and $$refNewEntry{browser}      ) { $valueInLog = $$refNewEntry{browser};       }
@@ -11084,7 +11111,7 @@ sub filtersAsSQLStr
             $partSQLStr .= 'datetimeInt ';
           } else {
             if ($$refFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $STR{'isp'} or
-                $$refFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $STR{'GeoIPDB'}) {
+                $$refFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $STR{'GeoIP'}) {
               $partSQLStr .= 'remoteIP IN (SELECT ip FROM IP WHERE ';
               $partSQLStr .= $$refFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field}.' ';
             } elsif ($$refFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $STR{'LFUA-t'}  or
@@ -11171,7 +11198,7 @@ sub filtersAsSQLStr
           }
         }
         if ($$refFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $STR{'isp'}     or
-            $$refFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $STR{'GeoIPDB'} or
+            $$refFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $STR{'GeoIP'}   or
             $$refFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $STR{'LFUA-t'}  or
             $$refFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $STR{'LFUA-os'} or
             $$refFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $STR{'LFUA-b'}  or
@@ -11207,8 +11234,16 @@ sub sortIP
         } else { return $a3 <=> $b3; }
       } else { return $a2 <=> $b2; }
     } else { return $a1 <=> $b1; }
-  # If one of the address is IPv6, compare first number only
-  } else { return (split(/[\.\:]/, $a))[0] <=> (split(/[\.\:]/, $b))[0]; }
+  }
+  # IPv6 always greate than IPv4
+  elsif ($a =~ /\:/ and $b !~ /\:/) { return(1);  } # IPv6 > IPv4
+  elsif ($a !~ /\:/ and $b =~ /\:/) { return(-1); } # IPv4 < IPv6
+  # If both are IPv6:
+  else {
+    my $ipv6_a = new NetAddr::IP($a);
+    my $ipv6_b = new NetAddr::IP($b);
+    return ($ipv6_a <=> $ipv6_b);
+  }
   
 }  #--- End sortIP
 
@@ -11220,7 +11255,8 @@ sub nsLookup
   my $item    = shift;
   my $timeOut = shift;
   # $item is an IP address
-  if ($item =~ /(?:[^0-9]|^)((?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))(?:[^0-9\.]|$)/ or $item =~ /($IPv6_re)/) {
+  if ($item =~ /(?:[^0-9]|^)((?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))(?:[^0-9\.]|$)/ or
+      $item =~ /(?:[^0-9a-fA-F\:]|^)($IPv6_re)(?:[^0-9a-fA-F\:]|$)/) {
     my $res = Net::DNS::Resolver->new;
     $res->tcp_timeout($timeOut);
     $res->udp_timeout($timeOut);

@@ -1,16 +1,16 @@
 XL-Parser
 Description		: Part of the XL-Toolkit, XL-Parser provides a bunch of functions for data extraction and analysis.
-Author				: Alain Rioux (admin@le-tools.com)
-WebSite				: http://le-tools.com/XL-Parser.html
+Author			: Alain Rioux (admin@le-tools.com)
+WebSite			: http://le-tools.com/XL-Parser.html
 SourceForge		: https://sourceforge.net/p/xl-parser
-GitHub				: https://github.com/arioux/XL-Parser
+GitHub			: https://github.com/arioux/XL-Parser
 Documentation	: http://le-tools.com/XL-ParserDoc.html
 
 
 Licence
 -------
 
-Copyright (C) 2015-2018  Alain Rioux (le-tools.com)
+Copyright (C) 2015-2019  Alain Rioux (le-tools.com)
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
@@ -23,7 +23,7 @@ Credits
 -------
 
 For database:
-- GeoIP Database comes from Maxmind. Link for the database is http://geolite.maxmind.com/download/geoip/database/GeoLiteCity.dat.gz.
+- This product includes GeoLite2 data created by MaxMind, available from https://www.maxmind.com.
 - OUI Database comes from the IEEE Standards Association. Link for the database is http://standards-oui.ieee.org/oui.txt.
 - The Public Suffix List come from https://publicsuffix.org. Link to the database is https://publicsuffix.org/list/public_suffix_list.dat.
 

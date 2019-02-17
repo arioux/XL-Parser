@@ -6,10 +6,10 @@
 # SourceForge				: https://sourceforge.net/p/xl-parser
 # GitHub						: https://github.com/arioux/XL-Parser
 # Creation          : 2016-07-15
-# Modified          : 2018-01-06
+# Modified          : 2019-02-17
 # Author            : Alain Rioux (admin@le-tools.com)
 #
-# Copyright (C) 2016-2018 Alain Rioux (le-tools.com)
+# Copyright (C) 2016-2019 Alain Rioux (le-tools.com)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -126,8 +126,11 @@ sub loadDefaultStr
   $$refSTR{'Creating'}        = 'Creating';
   $$refSTR{'Parsing'}         = 'Parsing';
   $$refSTR{'Hashing'}         = 'Hashing';
+  $$refSTR{'Inserting'}       = 'Inserting';
+  $$refSTR{'Resolving'}       = 'Resolving';
   $$refSTR{'WritingReport'}   = 'Writing report';
-  $$refSTR{'connecting'}      = 'Connecting to';
+  $$refSTR{'Connecting'}      = 'Connecting to';
+  $$refSTR{'Download'}        = 'Download';
   $$refSTR{'Started'}         = 'started';
   $$refSTR{'Finished'}        = 'finished';
   $$refSTR{'cancel'}          = 'Cancel';
@@ -140,7 +143,7 @@ sub loadDefaultStr
   $$refSTR{'completed'}       = 'The extraction have been completed!';
   $$refSTR{'noResult'}        = 'No result.';
   # Error
-  $$refSTR{'error'}           = 'Error';
+  $$refSTR{'Error'}           = 'Error';
   $$refSTR{'EndErrors'}       = 'error(s)';
   $$refSTR{'moreFormatMatch'} = 'More than one match.';
   $$refSTR{'formatNotFound'}  = 'Format not found';
@@ -165,7 +168,7 @@ sub loadDefaultStr
   $$refSTR{'errorDB'}         = 'Error database';
   $$refSTR{'errorConnectDB'}  = 'Error connecting to database';
   $$refSTR{'errorConRemote'}  = 'Error connecting to remote site';
-  $$refSTR{'errorDownload'}   = 'Error downloading the database';
+  $$refSTR{'errorDownload'}   = 'Error downloading';
   $$refSTR{'errorCreatingDB'} = 'Error creating the database';
   $$refSTR{'errLoadingDB'}    = 'Error loading database.';
   $$refSTR{'errUpdatingDB'}   = 'Error updating database: ';
@@ -292,7 +295,6 @@ sub loadDefaultStr
   $$refSTR{'LAFileOrder'}         = 'File order';
   $$refSTR{'SortingFiles'}        = 'Sorting files';
   $$refSTR{'Weekday'}             = 'Weekday';
-  $$refSTR{'openLFDB'}            = 'Open the Log format database';
   $$refSTR{'chLASelectDB'}        = 'Select database when finished';
   $$refSTR{'updatedDB'}           = 'The database has been updated';
   $$refSTR{'Category'}            = 'Category';
@@ -468,7 +470,7 @@ sub loadDefaultStr
   $$refSTR{'winExprTool'}     = 'Expression tool';
   $$refSTR{'lblDataSample'}   = 'Data sample';
   # Log format database
-  $$refSTR{'winLFDB'}         = 'Log format database';
+  $$refSTR{'LFDB'}            = 'Log format database';
   $$refSTR{'btnLFAdd'}        = 'Add a new log format';
   $$refSTR{'btnLFEdit'}       = 'Edit the selected log format';
   $$refSTR{'btnLFDel'}        = 'Remove the selected log format';
@@ -633,12 +635,13 @@ sub loadDefaultStr
   $$refSTR{'configSetPart'}   = 'Aborted! XL-Parser has been partially configured.';
   # General tab
   $$refSTR{'Tool'}            = 'Tool';
+  $$refSTR{'Update'}          = 'Update';
   $$refSTR{'update1'}         = 'You have the latest version installed.';
   $$refSTR{'update2'}         = 'Check for update';
-  $$refSTR{'update3'}         = 'Update';
   $$refSTR{'update5'}         = 'is available. Download it';
   $$refSTR{'chFullScreen'}    = 'Start Full Screen';
   $$refSTR{'chRememberPos'}   = 'Remember position';
+  $$refSTR{'language'}        = 'language';
   $$refSTR{'NsLookupTO1'}     = 'Nslookup timeout';
   $$refSTR{'seconds'}         = 'seconds';
   # Databases tab
@@ -646,49 +649,32 @@ sub loadDefaultStr
   $$refSTR{'remoteDBDate'}    = 'DB date on';
   $$refSTR{'updateAvailable'} = 'An update of the database is available, download';
   $$refSTR{'DBUpToDate'}      = 'Your database is up to date';
+  $$refSTR{'HasBeenUpdated'}  = 'has been updated';
+  $$refSTR{'NotExistDownload'} = 'does not exist, download';
   $$refSTR{'createDBTable'}   = 'Create database and table';
   $$refSTR{'ImportExprDB'}    = 'Import data from another database';
   $$refSTR{'dbFile'}          = 'Database file';
   $$refSTR{'createdDB'}       = 'The database has been created';
   $$refSTR{'selPathDB'}       = 'Select the path for the database';
-  $$refSTR{'LocateThe'}       = 'Locate the ';
+  $$refSTR{'LocateThe'}       = 'Locate the';
+  $$refSTR{'OpenThe'}         = 'Open the';
   $$refSTR{'OUIDB'}           = 'OUI (MAC Addresses)';
-  $$refSTR{'OUIDB2'}          = 'MAC OUI database';
-  $$refSTR{'selMACOUIFile'}   = 'Select the MAC OUI Database file';
-  $$refSTR{'importOUIDB'}     = 'Import OUI Database';
-  $$refSTR{'importedOUIDB'}   = 'OUI Database successfully imported!';
-  $$refSTR{'updatedMACOUI'}   = 'The MACOUI database has been updated';
-  $$refSTR{'MACOUINotExist'}  = 'The MAC OUI database (oui.db) does not exist, download';
-  $$refSTR{'convertMACOUI'}   = 'Convert MAC OUI Database';
-  $$refSTR{'GeoIPDB'}         = 'GeoIP';
-  $$refSTR{'GeoIPDB2'}        = 'GeoIP database';
-  $$refSTR{'selGeoIPFile'}    = 'Select the GeoIP Database file';
-  $$refSTR{'updatedGeoIP'}    = 'The GeoIP database has been updated';
-  $$refSTR{'GeoIPNotExist'}   = 'The GeoIP database (GeoLiteCity.dat) does not exist, download';
+  $$refSTR{'MACOUIDB'}        = 'MAC OUI database';
+  $$refSTR{'GeoIP'}           = 'GeoIP';
+  $$refSTR{'GeoIPDB'}         = 'GeoIP database';
+  $$refSTR{'GeoIPNotice'}     = 'This product includes GeoLite2 data created by MaxMind, available from https://www.maxmind.com.';
   $$refSTR{'IINLocalDB'}      = 'IIN (Credit cards)';
-  $$refSTR{'IINLocalDB2'}     = 'IIN database';
-  $$refSTR{'downloadWarning'} = 'It may take a few minutes';
-  $$refSTR{'updatedIINDB'}    = 'The IIN database has been updated';
+  $$refSTR{'IINDB'}           = 'IIN database';
   # XL-Parser Database tab
-  $$refSTR{'btnExprHistoryNewTip'} = 'Create a new Expression history database';
-  $$refSTR{'btnExprNewTip'}   = 'Create a new Expression database';
-  $$refSTR{'downloadLFDB'}    = 'Downloading Log format database';
-  $$refSTR{'LFDBNotExist'}    = 'The Log format database (LF.db) does not exist, download';
-  $$refSTR{'updatedLFDB'}     = 'The Log format database has been updated';
-  $$refSTR{'btnLAFiltersNewTip'} = 'Create a new Log Analysis Filters database';
+  $$refSTR{'btnExprHistoryNewTip'}  = 'Create a new Expression history database';
+  $$refSTR{'btnExprNewTip'}         = 'Create a new Expression database';
+  $$refSTR{'btnLAFiltersNewTip'}    = 'Create a new Log Analysis Filters database';
   # XL-Toolkit Databases tab
   $$refSTR{'XLWhoisDB'}       = 'ISP (XL-Whois)';
   $$refSTR{'XLWhoisDB2'}      = 'ISP database';
   $$refSTR{'ResTLDDB'}        = 'Resolve TLD database';
-  $$refSTR{'ResTLDDBNotExist'} = 'The Resolve TLD database (Resolve TLD.db) does not exist, download';
-  $$refSTR{'updatedResTLDDB'}  = 'The Resolve TLD database has been updated';
   $$refSTR{'lblTLDDB'}        = 'TLD database';
-  $$refSTR{'btnTLDDBTip'}     = 'Select the TLD database file';
-  $$refSTR{'TLDDBNotExist'}   = 'The TLD database (Resolve TLD.db) does not exist, download';
-  $$refSTR{'updatedTLDDB'}    = 'The TLD database has been updated';
   $$refSTR{'DTDB'}            = 'Datetime';
-  $$refSTR{'DTDBNotExist'}    = 'The Datetime database (DT.db) does not exist, download';
-  $$refSTR{'updatedDTDB'}     = 'The Datetime database has been updated';
   # About Window
   $$refSTR{'About'}           = 'About';
   $$refSTR{'Version'}         = 'Version';

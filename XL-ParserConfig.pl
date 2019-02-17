@@ -6,10 +6,10 @@
 # SourceForge					: https://sourceforge.net/p/xl-parser
 # GitHub							: https://github.com/arioux/XL-Parser
 # Creation						: 2016-07-15
-# Modified						: 2018-04-08
+# Modified						: 2019-02-17
 # Author							: Alain Rioux (admin@le-tools.com)
 #
-# Copyright (C) 2016-2018 Alain Rioux (le-tools.com)
+# Copyright (C) 2016-2019 Alain Rioux (le-tools.com)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -29,7 +29,8 @@
 #------------------------------------------------------------------------------#
 use strict;
 use warnings;
-use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
+use GeoIP2::Database::Reader;
+use Archive::Tar;
 use IO::Uncompress::Unzip qw(unzip $UnzipError);
 use Domain::PublicSuffix;
 
@@ -39,7 +40,7 @@ use Domain::PublicSuffix;
 my $URL_TOOL        = 'http://le-tools.com/XL-Parser.html#Download';           # Url of the tool
 my $URL_VER         = 'http://www.le-tools.com/download/XL-ParserVer.txt';     # Url of the version file
 my $MACOUIDB_URL    = 'http://standards-oui.ieee.org/oui.txt';                 # URL of the MAC OUI DB
-my $GEOIPDB_URL     = 'http://geolite.maxmind.com/download/geoip/database/GeoLiteCity.dat.gz'; # URL of the GeoIP DB
+my $GEOIPDB_URL			= 'https://geolite.maxmind.com/download/geoip/database/GeoLite2-City.tar.gz'; # URL of the GeoIP DB
 my $IINDB_URL       = 'http://le-tools.com/download/XL-Tools/IIN.zip';         # URL of the IINDB
 my $TLDDB_URL       = 'https://publicsuffix.org/list/effective_tld_names.dat'; # URL of the TLD DB
 my $RESTLDDB_URL    = 'http://le-tools.com/download/XL-Tools/Resolve TLD.zip'; # URL of the Resolve TLD DB
@@ -52,8 +53,8 @@ sub saveConfig
 #--------------------------#
 {
   # Local variables
-  my $CONFIG_FILE = shift;
   my $refConfig   = shift;
+  my $CONFIG_FILE = shift;
   # Save configuration hash values
   open(CONFIG,">$CONFIG_FILE");
   flock(CONFIG, 2);
@@ -85,6 +86,10 @@ sub loadConfig
   else                                              { $$refWinConfig->chFullScreen->Checked(0);                                         } # Default is not checked
   if (exists($$refConfig{'REMEMBER_POS'}))          { $$refWinConfig->chRememberPos->Checked($$refConfig{'REMEMBER_POS'});              }
   else                                              { $$refWinConfig->chRememberPos->Checked(0);                                        } # Default is not checked
+  if (exists($$refConfig{'GEOIP_LANG'}))						{
+    my $index = $$refWinConfig->cbGeoIPLang->FindStringExact($$refConfig{'GEOIP_LANG'});
+    $$refWinConfig->cbGeoIPLang->SetCurSel($index);
+  } else { $$refConfig{'GEOIP_LANG'} = 'en'; }
   if (exists($$refConfig{'NSLOOKUP_TIMEOUT'}))      { $$refWinConfig->tfLookupTO->Text($$refConfig{'NSLOOKUP_TIMEOUT'});                }
   else                                              { $$refWinConfig->tfLookupTO->Text(10); $$refConfig{'NSLOOKUP_TIMEOUT'} = 10;       } # Default is 10 seconds
   if (exists($$refConfig{'LOCAL_TIMEZONE'}))        { $$refWinConfig->cbLocalTZ->SetCurSel($$refConfig{'LOCAL_TIMEZONE'}); }
@@ -164,7 +169,8 @@ sub updateAll
 #--------------------------#
 {
 	# Local variables
-	my ($VERSION, $USERDIR, $refHOURGLASS, $refARROW, $CONFIG_FILE, $refConfig, $refWinConfig, $refWinPb, $refWin, $refSTR) = @_;
+	my ($VERSION, $USERDIR, $refHOURGLASS, $refARROW, $refWinConfig, $refConfig, $CONFIG_FILE, $refWinDTDB,
+			$refWinLFDB, $refWinLFObj, $refWinPb, $refWin, $refSTR) = @_;
   # Thread 'cancellation' signal handler
   $SIG{'KILL'} = sub {
     # Delete temp files if converting was in progress
@@ -198,17 +204,19 @@ sub updateAll
     $$refWinPb->lblCount->Text('');
     $$refWinPb->pbWinPb->SetPos(0);
     $$refWinPb->Hide();
-    Win32::GUI::MessageBox($$refWinConfig, "$$refSTR{'errorMsg'}: $errMsg", $$refSTR{'error'}, 0x40010);
+    Win32::GUI::MessageBox($$refWinConfig, "$$refSTR{'errorMsg'}: $errMsg", $$refSTR{'Error'}, 0x40010);
   };
-  # Update Tool ?
   sleep(1);
-  &updateTool(   	0, $VERSION, $refWinConfig, $refWin, $refSTR) if $$refConfig{'TOOL_AUTO_UPDATE'};
-  # Update GeoIP DB ?
-  &updateGeoIPDB(	0, $VERSION, $USERDIR, $refHOURGLASS, $refARROW, $CONFIG_FILE, $refConfig, $refWinConfig,
-									$refWinPb, $refWin, $refSTR) if $$refConfig{'GEOIP_DB_AUTO_UPDATE'};
-  # Update MACOUI DB ?
-  &updateMACOUIDB(0, $VERSION, $USERDIR, $refHOURGLASS, $refARROW, $CONFIG_FILE, $refConfig, $refWinConfig,
-									$refWinPb, $refWin, $refSTR) if ($$refConfig{'MACOUI_DB_AUTO_UPDATE'});
+  &updateTool(    0, $VERSION, $refWinConfig, $refWin, $refSTR) if $$refConfig{'TOOL_AUTO_UPDATE'};	# Update Tool?
+	&updateDB(0, 'GeoIP', $$refSTR{'GeoIPDB'}, $$refWinConfig->tfGeoIPDB->Text(), 'Maxmind', 'GeoLite2-City.mmdb',
+						$USERDIR, $refHOURGLASS, $refARROW, $refConfig, $CONFIG_FILE, $refWinConfig, $refWinDTDB, $refWinLFDB,
+						$refWinLFObj, $refWinPb, $refWin, $refSTR) if $$refConfig{'GEOIP_DB_AUTO_UPDATE'};			# Update GeoIP ?
+	&updateDB(0, 'MACOUI', $$refSTR{'MACOUIDB'}, $$refWinConfig->tfMACOUIDB->Text(), 'ieee.org', 'oui.db', $USERDIR,
+						$refHOURGLASS, $refARROW, $refConfig, $CONFIG_FILE, $refWinConfig, $refWinDTDB, $refWinLFDB, $refWinLFObj,
+						$refWinPb, $refWin, $refSTR)							if $$refConfig{'MACOUI_DB_AUTO_UPDATE'};			# Update MAC OUI ?
+	&updateDB(0, 'TLD', $$refSTR{'lblTLDDB'}, $$refWinConfig->tfTLDDB->Text(), 'publicsuffix.org', 'effective_tld_names.dat',
+						$USERDIR, $refHOURGLASS, $refARROW, $refConfig, $CONFIG_FILE, $refWinConfig, $refWinDTDB, $refWinLFDB,
+						$refWinLFObj, $refWinPb, $refWin, $refSTR) if $$refConfig{'TLD_DB_AUTO_UPDATE'};				# Update TLDDB ?
   
 }  #--- End updateAll
 
@@ -234,112 +242,156 @@ sub updateTool
     if ($currVer le $VERSION) {
       Win32::GUI::MessageBox($$refWinConfig, $$refSTR{'update1'}, $$refSTR{'update2'}, 0x40040) if $confirm; # Up to date
     } else {
-      my $answer = Win32::GUI::MessageBox($$refWinConfig, "$$refSTR{'Version'} $currVer $$refSTR{'update5'} ?", $$refSTR{'update3'}, 0x40024); # Download available
+      my $answer = Win32::GUI::MessageBox($$refWinConfig, "$$refSTR{'Version'} $currVer $$refSTR{'update5'} ?", "$$refSTR{'Update'} XL-Parser", 0x40024); # Download available
       # Download the update
       if ($answer == 6) {
         # Open XL-Parser page with default browser
         $$refWin->ShellExecute('open', $URL_TOOL,'','',1) or
-          Win32::GUI::MessageBox($$refWinConfig, Win32::FormatMessage(Win32::GetLastError()), "$$refSTR{'update3'} XL-FileTools",0x40010);
+          Win32::GUI::MessageBox($$refWinConfig, Win32::FormatMessage(Win32::GetLastError()), "$$refSTR{'Update'} XL-Parser",0x40010);
       }
     }
   }
   # Error 
-  elsif ($confirm) { Win32::GUI::MessageBox($$refWinConfig, $$refSTR{'errorConnection'}.': '.$res->status_line, "$$refSTR{'update3'} XL-FileTools",0x40010); }
+  elsif ($confirm) { Win32::GUI::MessageBox($$refWinConfig, $$refSTR{'errorConnection'}.': '.$res->status_line, "$$refSTR{'Update'} XL-Parser",0x40010); }
 
 }  #--- End updateTool
 
 #--------------------------#
-sub validMACOUIDB
+sub validSQLiteDB
 #--------------------------#
 {
   # Local variables
-  my $MACOUIDBFile = shift;
-  if (-f $MACOUIDBFile) {
-    # Connect to DB
-		$MACOUIDBFile = encode('utf8', $MACOUIDBFile);
-    my $dsn = "DBI:SQLite:dbname=$MACOUIDBFile";
-    if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
-      my $sth;
-      eval { $sth = $dbh->table_info(undef, undef, '%', 'TABLE'); };
-      return(0) if $@;
-      # If table MACOUI exists, database is valid
-      my @info = $sth->fetchrow_array;
-      $sth->finish();
-      return(1) if $info[2] and $info[2] eq 'MACOUI';
+  my $DBFile = shift; # SQLite DB file
+	my $table	 = shift; # Table name to check
+  if (-f $DBFile) {
+    my $dsn = "DBI:SQLite:dbname=$DBFile";
+    if (my $dbh = DBI->connect($dsn, undef, undef, { })) {
+      if (my $sth = $dbh->table_info(undef, undef, '%', 'TABLE')) {
+				my @info = $sth->fetchrow_array;
+				$sth->finish();
+				return(1) if $info[2] eq $table; # If table exists, database is valid
+			}
     }
   }
   return(0);
   
-}  #--- End validMACOUIDB
+}  #--- End validSQLiteDB
 
 #--------------------------#
-sub updateMACOUIDB
+sub updateDB
 #--------------------------#
 {
   # This function may be called in 2 ways
   # 1. User click on the update button ($confirm == 1)
   # 2. Auto update at start up: If database is up to date, we don't show message
-	my ($confirm, $VERSION, $USERDIR, $refHOURGLASS, $refARROW, $CONFIG_FILE, $refConfig, $refWinConfig,
-			$refWinPb, $refWin, $refSTR) = @_;
-  my ($upToDate, $return, $dateLocalFile, $dateRemoteFile) = &checkDateMACOUIDB($confirm, $refConfig, $refWinConfig);
+  
+  # Local variables
+	my ($confirm, $db, $dbStr, $localFile, $site, $filename, $USERDIR, $refHOURGLASS, $refARROW, $refConfig, $CONFIG_FILE,
+			$refWinConfig, $refWinDTDB, $refWinLFDB, $refWinLFObj, $refWinPb, $refWin, $refSTR) = @_;
+  # if $confirm == 1, show message
+  # $db: MACOUI, GeoIP
+	if (!$localFile and $db eq 'GeoIP' and $localFile = &findXLTKfile('GeoIPDB')) {
+		$$refWinConfig->tfGeoIPDB->Text($localFile);
+		$$refConfig{'GEOIP_DB_FILE'} = $localFile;
+		&saveConfig($refConfig, $CONFIG_FILE);
+	}
+  $localFile = "$USERDIR\\$filename"		if !$localFile;  # Default location
+	my $url;
+	if		($db eq 'MACOUI') { $url = $MACOUIDB_URL; }
+	elsif ($db eq 'GeoIP'	) { $url = $GEOIPDB_URL; 	}
+	elsif ($db eq 'TLD'		) { $url = $TLDDB_URL; 		}
+  # Check if update available or necessary
+  my $refWinH = $refWin;
+  $refWinH    = $refWinConfig if $confirm;
+  my ($upToDate, $return, $dateLocalFile, $dateRemoteFile) = &checkUpdate($confirm, $refWinH, $localFile, $url, $refHOURGLASS, $refARROW,
+																																					$refConfig, $refWinConfig, $refWinPb, $refSTR);
   # Values for $upToDate
-  # 0: MAC OUI Database doesn't exist
+  # 0: Database doesn't exist  
   # 1: Database is up to date
   # 2: Database is outdated
   # 3: Error connection
   # 4: Unknown error
-
-  # MAC OUI Database is outdated or doesn't exist
+  # Database is outdated or doesn't exist
   if (!$upToDate or $upToDate == 2) {
     my $msg;
     if ($dateLocalFile and $dateRemoteFile) {
       Encode::from_to($dateRemoteFile, 'utf8', 'iso-8859-1');
-      $msg = "$$refSTR{'currDBDate'}: $dateLocalFile\n$$refSTR{'remoteDBDate'} ieee.org: $dateRemoteFile\n\n$$refSTR{'updateAvailable'} ?";
-    } else { $msg = "$$refSTR{'MACOUINotExist'} ?"; }
-    my $answer = Win32::GUI::MessageBox($$refWin, $msg, $$refSTR{'update3'}.' '.$$refSTR{'OUIDB2'}, 0x1024);
+      $msg = "$$refSTR{'currDBDate'}: $dateLocalFile\n$$refSTR{'remoteDBDate'} $site: $dateRemoteFile\n\n$$refSTR{'updateAvailable'}?";
+    } else { $msg .= "$dbStr ($filename) $$refSTR{'NotExistDownload'}?"; }
+    my $answer = Win32::GUI::MessageBox($$refWinH, $msg, "$$refSTR{'Update'} $dbStr", 0x1024);
     # Answer is No (7)
     if ($answer == 7) { return(0); }
-    # Answer is Yes, download the update
+    # Answer is Yes (6), download the update
     else {
-      my $return = &downloadMACOUIDB($$refWinConfig->tfMACOUIDB->Text(), $USERDIR, $refHOURGLASS, $refARROW,
-																		 $CONFIG_FILE, $refConfig, $refWinConfig, $refWinPb, $refWin, $refSTR); # $return contains error msg if any
-      if ($return) { Win32::GUI::MessageBox($$refWin, $return, $$refSTR{'error'}, 0x40010);                     }
-      else         { Win32::GUI::MessageBox($$refWin, $$refSTR{'updatedMACOUI'}, "XL-Parser $VERSION", 0x40040); }
+      $$refWinH->ChangeCursor($$refHOURGLASS);
+			if      ($db eq 'GeoIP') {
+				if ($localFile) { $localFile =~ s/\\[^\\]+$//; }
+				else            { $localFile = $USERDIR;       }
+			}
+			my ($status, $return) = &downloadDB($refWinH, $db, $dbStr, $localFile, $site, $refHOURGLASS, $refARROW, $refConfig,
+																					$CONFIG_FILE, $refWinConfig, $refWinDTDB, $refWinLFDB, $refWinLFObj, $refWinPb, $refWin, $refSTR);
+      if ($status) {
+        $$refWinH->ChangeCursor($$refARROW);
+        Win32::GUI::MessageBox($$refWinH, "$dbStr $$refSTR{'HasBeenUpdated'}", "$$refSTR{'Update'} $dbStr", 0x40040);
+      } else {
+        $$refWinH->ChangeCursor($$refARROW);
+        $msg = "$$refSTR{'errorDownload'} $dbStr..." if !$msg;
+        Win32::GUI::MessageBox($$refWinH, $msg, $$refSTR{'Error'}, 0x40010);
+      }
     }
-  # MAC OUI is up to date, show message if $confirm == 1
+  # DB is up to date, show message if $confirm == 1
   } elsif ($upToDate == 1) {
     if ($confirm) {
       Encode::from_to($dateRemoteFile, 'utf8', 'iso-8859-1');
-      Win32::GUI::MessageBox($$refWin, "$$refSTR{'currDBDate'}: $dateLocalFile\n$$refSTR{'remoteDBDate'} ieee.org: ".
-                                       "$dateRemoteFile\n\n$$refSTR{'DBUpToDate'} !", $$refSTR{'update3'}.' '.$$refSTR{'OUIDB2'}, 0x40040);
+      my $msg = "$$refSTR{'currDBDate'}: $dateLocalFile\n$$refSTR{'remoteDBDate'} $site: $dateRemoteFile\n\n$$refSTR{'DBUpToDate'}!";
+      Win32::GUI::MessageBox($$refWinH, $msg, "$$refSTR{'Update'} $dbStr", 0x40040);
     }
   # Connection error, show message if $confirm == 1
   } elsif (($upToDate == 3 or $upToDate == 4) and $confirm) {
-    if ($upToDate == 3) { Win32::GUI::MessageBox($$refWin, "$$refSTR{'errorConnection'}: $return", $$refSTR{'error'}, 0x40010); }
-    else                { Win32::GUI::MessageBox($$refWin, "$$refSTR{'unknownError'}: $return", $$refSTR{'error'}   , 0x40010); }
+    if ($upToDate == 3) { Win32::GUI::MessageBox($$refWinH, "$$refSTR{'errorConnection'}: $return", $$refSTR{'Error'}, 0x40010); }
+    else                { Win32::GUI::MessageBox($$refWinH, "$$refSTR{'unknownError'}: $return", $$refSTR{'Error'}   , 0x40010); }
   }
 
-}  #--- End updateMACOUIDB
+}  #--- End updateDB
 
 #--------------------------#
-sub checkDateMACOUIDB
+sub checkUpdate
 #--------------------------#
 {
   # Local variables
-  my ($confirm, $refConfig, $refWinConfig) = @_;
-  my $localMACOUIDB  = $$refWinConfig->tfMACOUIDB->Text();
+  my ($confirm, $refWinH, $localFile, $url, $refHOURGLASS, $refARROW, $refConfig, $refWinConfig, $refWinPb, $refSTR) = @_;
   my $lastModifDate;
-  # MAC OUI Database doesn't exist or invalid file
-  return(0, undef, undef, undef) if !$localMACOUIDB or !-f $localMACOUIDB;
+  # File doesn't exist or invalid
+  return(0, undef, undef, undef) if !$localFile or !-f $localFile;
   # Check date of local file
-  my $localFileT  = DateTime->from_epoch(epoch => (stat($localMACOUIDB))[9]);
+  my $localFileT = DateTime->from_epoch(epoch => (stat($localFile))[9]);
+  if ($confirm) {
+    # Set the progress bar
+    $$refWinH->ChangeCursor($$refHOURGLASS);
+    $$refWinPb->Text($$refSTR{'Update'});
+    $$refWinPb->lblPbCurr->Text($$refSTR{'update2'}.'...');
+    $$refWinPb->pbWinPb->SetRange(0, 1);
+    $$refWinPb->pbWinPb->SetPos(0);
+    $$refWinPb->pbWinPb->SetStep(1);
+    $$refWinPb->Center($$refWinH);
+    $$refWinPb->Show();
+  }
   # Check date of the remote file
-  my $ua = new LWP::UserAgent;
+  my $ua = LWP::UserAgent->new;
   $ua->agent($$refConfig{'USERAGENT'});
+  $ua->timeout($$refConfig{'NSLOOKUP_TIMEOUT'});
   $ua->default_header('Accept-Language' => 'en');
-  my $req    = new HTTP::Request HEAD => $MACOUIDB_URL;
+  my $req = HTTP::Request->new(HEAD => $url);
   my $res    = $ua->request($req);
   my $return = $res->status_line;
+  if ($confirm) {
+    # Turn off progress bar
+    $$refWinH->ChangeCursor($$refARROW);
+    $$refWinPb->lblPbCurr->Text('');
+    $$refWinPb->lblCount->Text('');
+    $$refWinPb->pbWinPb->SetPos(0);
+    $$refWinPb->Hide();
+  }
   if ($res->code == 200) {
     $lastModifDate = $res->header('last-modified');
     $TOTAL_SIZE    = $res->header('content_length');
@@ -352,52 +404,63 @@ sub checkDateMACOUIDB
     else           { return(2, $return, $localFileT->ymd(), $lastModifT->ymd()); } # MACOUIDB is outdated
   } else           { return(3, $return, undef             , undef             ); } # Connection error
 
-}  #--- End checkDateMACOUIDB
+}  #--- End checkUpdate
 
 #--------------------------#
-sub downloadMACOUIDB
+sub downloadDB
 #--------------------------#
 {
   # Local variables
-  my ($localMACOUIDB, $USERDIR, $refHOURGLASS, $refARROW, $CONFIG_FILE, $refConfig,
-			$refWinConfig, $refWinPb, $refWin, $refSTR) = @_;
-  $localMACOUIDB = "$USERDIR\\oui.db" if !$localMACOUIDB; # Default location
+  my ($refCurrWin, $db, $dbStr, $localFile, $site, $refHOURGLASS, $refARROW, $refConfig, $CONFIG_FILE, $refWinConfig,
+			$refWinDTDB, $refWinLFDB, $refWinLFObj, $refWinPb, $refWin, $refSTR) = @_;
+	my $url;
+	if		($db eq 'MACOUI') { $url = $MACOUIDB_URL; }
+	elsif ($db eq 'DT'		) { $url = $DTDB_URL;			}
+	elsif ($db eq 'IIN'		) { $url = $IINDB_URL;		}
+	elsif ($db eq 'LF'		) { $url = $LFDB_URL;			}
+	elsif ($db eq 'TLD'		) { $url = $TLDDB_URL;		}
+	elsif ($db eq 'ResTLD') { $url = $RESTLDDB_URL; }
+	elsif ($db eq 'GeoIP'	) { $url = $GEOIPDB_URL; 	}
+  # Start an agent
+  my $ua = LWP::UserAgent->new;
+  $ua->agent($$refConfig{'USERAGENT'});
+  $ua->timeout($$refConfig{'NSLOOKUP_TIMEOUT'});
+  $ua->default_header('Accept-Language' => 'en');
   # Set the progress bar
-  $$refWin->ChangeCursor($$refHOURGLASS);
-  $$refWinPb->Text($$refSTR{'Downloading'}.' '.$$refSTR{'OUIDB2'}.'...');
-  $$refWinPb->lblPbCurr->Text($$refSTR{'connecting'}.' ieee.org...');
+  $$refCurrWin->ChangeCursor($$refHOURGLASS);
+  $$refWinPb->Text("$$refSTR{'Download'} $dbStr...");
+  $$refWinPb->lblPbCurr->Text("$$refSTR{'Connecting'} $site...");
   $$refWinPb->lblCount->Text("0 %");
   $$refWinPb->pbWinPb->SetRange(0, 100);
   $$refWinPb->pbWinPb->SetPos(0);
   $$refWinPb->pbWinPb->SetStep(1);
-  $$refWinPb->Center($$refWin);
+  $$refWinPb->Center($$refCurrWin);
   $$refWinPb->Show();
-  # Start an agent
-  my $ua = new LWP::UserAgent;
-  $ua->agent($$refConfig{'USERAGENT'});
-  $ua->default_header('Accept-Language' => 'en');
   # Check size of the remote file
   if (!$TOTAL_SIZE) {
-    my $req    = new HTTP::Request HEAD => $MACOUIDB_URL;
+    my $req    = new HTTP::Request HEAD => $url;
     my $res    = $ua->request($req);
     my $return = $res->status_line;
     if ($res->code == 200) { $TOTAL_SIZE = $res->header('content_length'); }
     else {
       # Turn off progress bar
-      $$refWin->ChangeCursor($$refARROW);
+      $$refCurrWin->ChangeCursor($$refARROW);
       $$refWinPb->lblPbCurr->Text('');
       $$refWinPb->lblCount->Text('');
       $$refWinPb->pbWinPb->SetPos(0);
       $$refWinPb->Hide();
-      return("$$refSTR{'errorMsg'}: $$refSTR{'errorConRemote'}...");
+      $TOTAL_SIZE = 0;
+      return(0, $$refSTR{'errorConnection'});
     }
   }
   # Download the file
+  my $errorMsg;
   if ($TOTAL_SIZE) {
     my $downloadData;
     # Download the file
-    $$refWinPb->lblPbCurr->Text($$refSTR{'Downloading'}.' '.$$refSTR{'OUIDB2'}.'. '.$$refSTR{'downloadWarning'}.'...');
-    my $response = $ua->get($MACOUIDB_URL, ':content_cb' => sub {
+    $$refWinPb->Text("$$refSTR{'Download'} $dbStr...");
+    $$refWinPb->lblPbCurr->Text("$$refSTR{'Download'} $dbStr...");
+    my $response = $ua->get($url, ':content_cb' => sub {
       # Local variables
       my ($data, $response, $protocol) = @_;
       $downloadData       .= $data;                                     # Downloaded data
@@ -406,53 +469,182 @@ sub downloadMACOUIDB
       $$refWinPb->pbWinPb->SetPos($completed);    # Set the progress bar
       $$refWinPb->lblCount->Text("$completed %"); # Indicate purcentage
     }, ':read_size_hint' => 32768);
-    # Save data in a temp file
-    my $ouiFileTemp = $localMACOUIDB . '.txt';
     if ($response and $response->is_success) {
-      open(OUI_TEMP,">$ouiFileTemp");
-      print OUI_TEMP $downloadData;
-      close(OUI_TEMP);
-    }
-    $downloadData = undef;
-    # Convert the downloaded data into a SQLite database
-    if (-T $ouiFileTemp) {
-      $TOTAL_SIZE = 0;
-      return(&importMACOUIDatabase(1, $localMACOUIDB, $ouiFileTemp, $refARROW, $CONFIG_FILE,
-																	 $refConfig, $refWinConfig, $refWinPb, $refWin, $refSTR));
-    }
-  } else {
+      # Save data in a file
+      if ($db eq 'MACOUI') {
+				my $ouiFileTemp = $localFile . '.txt';
+				open(OUI_TEMP,">$ouiFileTemp");
+				print OUI_TEMP $downloadData;
+				close(OUI_TEMP);
+				$downloadData = undef;
+				$TOTAL_SIZE = 0;
+				# Convert the downloaded data into a SQLite database
+				$errorMsg = &importMACOUIDatabase($localFile, $ouiFileTemp, $refWinConfig, $refConfig, $CONFIG_FILE, $refWinPb, $refSTR);
+			} elsif ($db eq 'DT') {
+				my $DTDB_ZIP = $localFile . '.zip';
+				if (open(ZIP,">$DTDB_ZIP")) {
+					binmode(ZIP);
+					print ZIP $downloadData;
+					close(ZIP);
+					# Uncompress DTDB ZIP
+					my ($error, $msg);
+					$TOTAL_SIZE = 0;
+					if (unzip $DTDB_ZIP => $localFile, BinModeOut => 1) {
+						if (&validSQLiteDB($localFile, 'DT')) {
+							unlink $DTDB_ZIP;
+							$$refWinConfig->tfDTDB->Text($localFile);
+							$$refConfig{'DT_DB_FILE'} = $localFile;
+							&saveConfig($refConfig, $CONFIG_FILE);
+							# Load the Datetime database
+							&loadDTDB($refWinDTDB, $refWinConfig, $refCurrWin, $refSTR);
+							&cbInputDTFormatAddITems();
+							$$refWin->cbInputDTFormat->SetCurSel(0);
+							&cbOutputDTFormatAddITems();
+							$$refWin->cbOutputDTFormat->SetCurSel(0);
+							# Default output format
+							if (exists($$refConfig{'DEFAULT_OUTPUT'})) { $$refWinDTDB->cbDefaultOutput->SetCurSel($$refConfig{'DEFAULT_OUTPUT'}); }
+							else                                       { $$refWinDTDB->cbDefaultOutput->SetCurSel(0); }
+						} else { $errorMsg = "$$refSTR{'errorMsg'}: $$refSTR{'invalidFile'}"; }
+					} else { $errorMsg = "$$refSTR{'errorMsg'}: $UnzipError"; }
+				}
+			} elsif ($db eq 'IIN') {
+				my $IINDB_ZIP = $localFile . '.zip';
+				if (open(ZIP,">$IINDB_ZIP")) {
+					binmode(ZIP);
+					print ZIP $downloadData;
+					close(ZIP);
+					# Uncompress IINDB ZIP
+					$TOTAL_SIZE = 0;
+					if (unzip $IINDB_ZIP => $localFile, BinModeOut => 1) {
+						if (&validSQLiteDB($localFile, 'IIN')) {
+							unlink $IINDB_ZIP;
+							$$refWinConfig->tfIINDB->Text($localFile);
+							$$refConfig{'IIN_DB_FILE'} = $localFile;
+							&saveConfig($refConfig, $CONFIG_FILE);
+						} else { $errorMsg = "$$refSTR{'errorMsg'}: $$refSTR{'invalidFile'}"; }
+					} else { $errorMsg = "$$refSTR{'errorMsg'}: $UnzipError"; }
+				}
+			} elsif ($db eq 'LF') {
+				my $LFDB_ZIP = $localFile . '.zip';
+				if (open(ZIP,">$LFDB_ZIP")) {
+					binmode(ZIP);
+					print ZIP $downloadData;
+					close(ZIP);
+					# Uncompress LFDB ZIP
+					$TOTAL_SIZE = 0;
+					if (unzip $LFDB_ZIP => $localFile, BinModeOut => 1) {
+						if (&validSQLiteDB($localFile, 'LF')) {
+							unlink $LFDB_ZIP;
+							$$refWinConfig->tfLFDB->Text($localFile);
+							$$refConfig{'LF_DB_FILE'} = $localFile;
+							&saveConfig($refConfig, $CONFIG_FILE);
+							# Load the Log format database
+							if (!$$refWinLFDB) {
+								&createWinLFDB(0);
+								&createWinLFObj() if !$$refWinLFObj;
+							}
+							&loadLFDB($localFile, $refWinLFDB, $refCurrWin, $refSTR);
+							&cbInputLFFormatAddITems();
+							$$refWin->cbLF->SetCurSel(0);
+						} else { $errorMsg = "$$refSTR{'errorMsg'}: $$refSTR{'invalidFile'}"; }
+					} else { $errorMsg = "$$refSTR{'errorMsg'}: $UnzipError"; }
+				}
+			} elsif ($db eq 'TLD') {
+        if (open(TLDDB,">$localFile")) {
+          print TLDDB $downloadData;
+          close(TLDDB);
+          # Vaidate file
+          if (-f $localFile) {
+            $$refWinConfig->tfTLDDB->Text($localFile);
+            $$refConfig{'TLD_DB_FILE'} = $localFile;
+						&saveConfig($refConfig, $CONFIG_FILE);
+          } else { $errorMsg = "$$refSTR{'errDownloading'} $dbStr..."; }
+				}
+			} elsif ($db eq 'ResTLD') {
+				my $ResTLDDB_ZIP = $localFile . '.zip';
+				if (open(ZIP,">$ResTLDDB_ZIP")) {
+					binmode(ZIP);
+					print ZIP $downloadData;
+					close(ZIP);
+					# Uncompress ResTLDDB ZIP
+					$TOTAL_SIZE = 0;
+					if (unzip $ResTLDDB_ZIP => $localFile, BinModeOut => 1) {
+						if (&validSQLiteDB($localFile, 'ResTLD')) {
+							unlink $ResTLDDB_ZIP;
+							$$refWinConfig->tfResTLDDB->Text($localFile);
+							$$refConfig{'RES_TLD_DB_FILE'} = $localFile;
+							&saveConfig($refConfig, $CONFIG_FILE);
+						} else { $errorMsg = "$$refSTR{'errorMsg'}: $$refSTR{'invalidFile'}"; }
+					} else { $errorMsg = "$$refSTR{'errorMsg'}: $UnzipError"; }
+				}
+      # Uncompress GeoIP downloaded file
+      } elsif ($db eq 'GeoIP') {
+        my $GeoIPGZIP = $localFile . '\GeoLite2-City.tar.gz';
+        if (open(GEOIPGZ,">$GeoIPGZIP")) {
+          binmode(GEOIPGZ);
+          print GEOIPGZ $downloadData;
+          close(GEOIPGZ);
+          # Uncompress GEOIP GZIP
+          $TOTAL_SIZE = 0;
+          my $tar   = Archive::Tar->new($GeoIPGZIP);
+          my @files = $tar->list_files;
+          my $db_file;
+          foreach my $file (@files) {
+            if ($file =~ /mmdb/) {
+              $db_file = (split(/\//, $file))[-1];
+              $tar->extract_file($file, "$localFile\\$db_file");
+            }
+          }
+          # Validate file
+          if (-e "$localFile\\$db_file" and &validGeoIPDB("$localFile\\$db_file")) {
+            unlink($GeoIPGZIP);
+            my $lastModifDate = $response->header('last-modified');
+						my $strp = DateTime::Format::Strptime->new(pattern => '%a, %d %b %Y %T %Z');
+            if ($lastModifDate and my $lastModifT = $strp->parse_datetime($lastModifDate)) { # Parse date
+              utime(time, $lastModifT->epoch, "$localFile\\$db_file"); # Change the last modified date of the db file
+            }
+            $$refWinConfig->tfGeoIPDB->Text("$localFile\\$db_file");
+            $$refConfig{'GEOIP_DB_FILE'} = "$localFile\\$db_file";
+            &saveConfig($refConfig, $CONFIG_FILE);
+          } else { $errorMsg = "$$refSTR{'errorMsg'}: $$refSTR{'invalidFile'}"; }
+        } else { $errorMsg = "$$refSTR{'errorMsg'}: $$refSTR{'errorUnzip'} $GeoIPGZIP"; }
+      }
+      $downloadData = undef;
+      if (!$errorMsg) {
+        # Turn off progress bar
+        $$refCurrWin->ChangeCursor($$refARROW);
+        $$refWinPb->lblPbCurr->Text('');
+        $$refWinPb->lblCount->Text('');
+        $$refWinPb->pbWinPb->SetPos(0);
+        $$refWinPb->Hide();
+        $TOTAL_SIZE = 0;
+        return(1);
+      }
+    } else { $errorMsg = "$$refSTR{'errorDownload'} $dbStr..."; }
+  } else { $errorMsg = "$$refSTR{'errorDownload'} $dbStr..."; }
+  if ($errorMsg) {
     # Turn off progress bar
-    $$refWin->ChangeCursor($$refARROW);
+    $refCurrWin->ChangeCursor($$refARROW);
     $$refWinPb->lblPbCurr->Text('');
     $$refWinPb->lblCount->Text('');
     $$refWinPb->pbWinPb->SetPos(0);
     $$refWinPb->Hide();
-    return("$$refSTR{'errorMsg'}: $$refSTR{'errorDownload'}...");
-  }  
+    $TOTAL_SIZE = 0;
+    return(0, $errorMsg);
+  }
   $TOTAL_SIZE = 0;
   
-}  #--- End downloadMACOUIDB
+}  #--- End downloadDB
 
 #--------------------------#
 sub importMACOUIDatabase
 #--------------------------#
 {
-  # This function may be called in 2 ways
-  # 1. User click on the import button using a local oui.txt
-  # 2. Database is downloaded
-  # Return error or return 0 if successful
-  my ($winPbStatus, $localMACOUIDB, $ouiFileTemp, $refARROW, $CONFIG_FILE, $refConfig, $refWinConfig, $refWinPb, $refWin, $refSTR) = @_;
-	# If $winPbStatus == 1, WinPb is already displayed
-  # $localMACOUIDB = Destination file
-  # $ouiFileTemp   = oui.txt file
+  # Local variables
+  my ($localMACOUIDB, $ouiFileTemp, $refWinConfig, $refConfig, $CONFIG_FILE, $refWinPb, $refSTR) = @_;
   my %oui;
-  # Show Progress Window
-  if (!$winPbStatus) {
-    $$refWinPb->Center($$refWin);
-    $$refWinPb->Show();
-  }
   # Set Progress Bar
-  $$refWinPb->Text($$refSTR{'convertMACOUI'});
+  $$refWinPb->Text("$$refSTR{'Convert'} $$refSTR{'MACOUIDB'}");
   $$refWinPb->lblPbCurr->Text('');
   $$refWinPb->lblCount->Text('');
   $$refWinPb->pbWinPb->SetPos(0);
@@ -460,22 +652,21 @@ sub importMACOUIDatabase
   open my $ouiFH, '<', $ouiFileTemp;
   while (<$ouiFH>) {
     if (/((?:[a-fA-F0-9]{2}\-){2}[a-fA-F0-9]{2})\s+\(hex\)\t+([^\n\r]+)(?:$|[\n\r])/) {
-      my $prefix = $1;
-      my $oui    = $2;
-      $prefix =~ s/\-//g;
+      my $prefix    = $1;
+      my $oui       = $2;
+      $prefix       =~ s/\-//g;
       $oui{$prefix} = $oui;
     }
   }
   close($ouiFH);
   my $nbrOUI = scalar(keys %oui);
   if ($nbrOUI) {
-		if (-e $localMACOUIDB) { # Delete last database file
-			unlink($localMACOUIDB);
-			$$refWinConfig->tfMACOUIDB->Text('');
-		}
-		# Create the database and the table
+    if (-f $localMACOUIDB) { # Delete last database file
+      unlink($localMACOUIDB);
+      $$refWinConfig->tfMACOUIDB->Text('');
+    }
+    # Create the database and the table
     $$refWinPb->lblPbCurr->Text($$refSTR{'createDBTable'}.'...');
-		$localMACOUIDB = encode('utf8', $localMACOUIDB);
     my $dsn = "DBI:SQLite:dbname=$localMACOUIDB";
     if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 0 })) {
       # Create the table
@@ -490,37 +681,35 @@ sub importMACOUIDatabase
         $$refWinPb->pbWinPb->SetRange(0, $nbrOUI);
         $$refWinPb->pbWinPb->SetPos(0);
         $$refWinPb->pbWinPb->SetStep(1);
-        my $sth = $dbh->prepare('INSERT OR REPLACE INTO MACOUI (prefix,org) values(?,?)');
+        my $sth = $dbh->prepare('INSERT OR REPLACE INTO MACOUI (prefix,org) VALUES(?,?)');
         foreach my $prefix (keys %oui) {
-          $$refWinPb->lblPbCurr->Text("$$refSTR{'add'} $prefix...");
+          $$refWinPb->lblPbCurr->Text("$$refSTR{'Inserting'} $prefix...");
           my $rv = $sth->execute($prefix, $oui{$prefix});
-					$curr++;
-					$dbh->commit() if $curr % 1000 == 0;
+          $curr++;
+          $dbh->commit() if $curr % 1000 == 0;
           # Update progress bar
           $$refWinPb->lblCount->Text("$curr / $nbrOUI");
           $$refWinPb->pbWinPb->StepIt();
         }
       }
-			$dbh->commit();
+      $dbh->commit();
       $dbh->disconnect();
       # Turn off progress bar
-      $$refWin->ChangeCursor($$refARROW);
       $$refWinPb->lblPbCurr->Text('');
       $$refWinPb->lblCount->Text('');
       $$refWinPb->pbWinPb->SetPos(0);
       $$refWinPb->Hide();
       # Final message
-      if (&validMACOUIDB($localMACOUIDB)) {
+      if (&validSQLiteDB($localMACOUIDB, 'MACOUI')) {
         unlink($ouiFileTemp);
         $$refWinConfig->tfMACOUIDB->Text($localMACOUIDB);
         $$refConfig{'MACOUI_DB_FILE'} = $localMACOUIDB;
-        &saveConfig($CONFIG_FILE, $refConfig);
+        &saveConfig($refConfig, $CONFIG_FILE);
         $$refWinConfig->tfMACOUIDB->Text($localMACOUIDB);
-        return(0);
+        return();
       } else { return("$$refSTR{'errorMsg'}: $$refSTR{'errorCreatingDB'}..."); }
     } else {
       # Turn off progress bar
-      $$refWin->ChangeCursor($$refARROW);
       $$refWinPb->lblPbCurr->Text('');
       $$refWinPb->lblCount->Text('');
       $$refWinPb->pbWinPb->SetPos(0);
@@ -529,7 +718,6 @@ sub importMACOUIDatabase
     }
   } else {
     # Turn off progress bar
-    $$refWin->ChangeCursor($$refARROW);
     $$refWinPb->lblPbCurr->Text('');
     $$refWinPb->lblCount->Text('');
     $$refWinPb->pbWinPb->SetPos(0);
@@ -545,188 +733,14 @@ sub validGeoIPDB
 {
   # Local variables
   my $GeoIPDBFile = shift;
-  if (-f $GeoIPDBFile and my $gi = Geo::IP->open($GeoIPDBFile)) { return(1) if $gi->database_info; }
-  return(0);
+  if (-e $GeoIPDBFile) {
+		eval { MaxMind::DB::Reader->new(file => $GeoIPDBFile) };
+    if (!$@) { return(1); }
+		else		 { return(0); }
+  } else { return(0); }
   
 }  #--- End validGeoIPDB
 
-#--------------------------#
-sub updateGeoIPDB
-#--------------------------#
-{
-  # This function may be called in 2 ways
-  # 1. User click on the update button ($confirm == 1)
-  # 2. Auto update at start up: If database is up to date, we don't show message
-	my ($confirm, $VERSION, $USERDIR, $refHOURGLASS, $refARROW, $CONFIG_FILE, $refConfig, $refWinConfig,
-			$refWinPb, $refWin, $refSTR) = @_;
-  my ($upToDate, $return, $dateLocalFile, $dateRemoteFile) = &checkDateGeoIPDB($confirm, $refConfig, $refWinConfig);
-  # Values for $upToDate
-  # 0: GeoIP Database doesn't exist  
-  # 1: Database is up to date
-  # 2: Database is outdated
-  # 3: Error connection
-  # 4: Unknown error
-
-  # GeoIP Database is outdated or doesn't exist
-  if (!$upToDate or $upToDate == 2) {
-    my $msg;
-    if ($dateLocalFile and $dateRemoteFile) {
-      Encode::from_to($dateRemoteFile, 'utf8', 'iso-8859-1');
-      $msg = "$$refSTR{'currDBDate'}: $dateLocalFile\n$$refSTR{'remoteDBDate'} Maxmind: $dateRemoteFile\n\n$$refSTR{'updateAvailable'} ?";
-    } else { $msg = "$$refSTR{'GeoIPNotExist'} ?"; }
-    my $answer = Win32::GUI::MessageBox($$refWin, $msg, $$refSTR{'update3'}.' '.$$refSTR{'GeoIPDB2'}, 0x1024);
-    # Answer is No (7)
-    if ($answer == 7) { return(0); }
-    # Answer is Yes, download the update
-    else {
-      my $return = &downloadGeoIPDB($$refWinConfig->tfGeoIPDB->Text(), $USERDIR, $refHOURGLASS, $refARROW,
-																		$CONFIG_FILE, $refConfig, $refWinConfig, $refWinPb, $refWin, $refSTR); # $return contains error msg if any
-      if ($return) { Win32::GUI::MessageBox($$refWin, $return, $$refSTR{'error'}, 0x40010);                    }
-      else         { Win32::GUI::MessageBox($$refWin, $$refSTR{'updatedGeoIP'}, "XL-Parser $VERSION", 0x40040); }
-    }
-  # GeoIP is up to date, show message if $confirm == 1
-  } elsif ($upToDate == 1) {
-    if ($confirm) {
-      Encode::from_to($dateRemoteFile, 'utf8', 'iso-8859-1');
-      Win32::GUI::MessageBox($$refWin, "$$refSTR{'currDBDate'}: $dateLocalFile\n$$refSTR{'remoteDBDate'} Maxmind: ".
-                                       "$dateRemoteFile\n\n$$refSTR{'DBUpToDate'} !", $$refSTR{'update3'}.' '.$$refSTR{'GeoIPDB2'}, 0x40040);
-    }
-  # Connection error, show message if $confirm == 1
-  } elsif (($upToDate == 3 or $upToDate == 4) and $confirm) {
-    if ($upToDate == 3) { Win32::GUI::MessageBox($$refWin, "$$refSTR{'errorConnection'}: $return", $$refSTR{'error'}, 0x40010); }
-    else                { Win32::GUI::MessageBox($$refWin, "$$refSTR{'unknownError'}: $return", $$refSTR{'error'}   , 0x40010); }
-  }
-
-}  #--- End updateGeoIPDB
-
-#--------------------------#
-sub checkDateGeoIPDB
-#--------------------------#
-{
-  # Local variables
-  my ($confirm, $refConfig, $refWinConfig) = @_;
-  my $localGeoIPDB = $$refWinConfig->tfGeoIPDB->Text();
-  my $lastModifDate;
-  # MAC OUI Database doesn't exist or invalid file
-  return(0, undef, undef, undef) if !$localGeoIPDB or !-f $localGeoIPDB;
-  # Check date of local file
-	my $localFileT  = DateTime->from_epoch(epoch => (stat($localGeoIPDB))[9]);
-  # Check date of the remote file
-  my $ua = new LWP::UserAgent;
-  $ua->agent($$refConfig{'USERAGENT'});
-  $ua->default_header('Accept-Language' => 'en');
-  my $req    = new HTTP::Request HEAD => $GEOIPDB_URL;
-  my $res    = $ua->request($req);
-  my $return = $res->status_line;
-  if ($res->code == 200) {
-    $lastModifDate = $res->header('last-modified');
-    $TOTAL_SIZE    = $res->header('content_length');
-  } else { return(3, $return, undef, undef); } # Error connection
-  # Compare local et remote file date
-  my $strp2 = DateTime::Format::Strptime->new(pattern => '%a, %d %b %Y %T %Z');
-  if (my $lastModifT = $strp2->parse_datetime($lastModifDate)) {
-    my $cmp = DateTime->compare($localFileT, $lastModifT);
-    if ($cmp > -1) { return(1, $return, $localFileT->ymd(), $lastModifT->ymd()); } # GeoIPDB is up to date 
-    else           { return(2, $return, $localFileT->ymd(), $lastModifT->ymd()); } # GeoIPDB is outdated
-  } else           { return(3, $return, undef             , undef             ); } # Connection error
-
-}  #--- End checkDateGeoIPDB
-
-#--------------------------#
-sub downloadGeoIPDB
-#--------------------------#
-{
-  # Local variables
-  my ($localGeoIPDB, $USERDIR, $refHOURGLASS, $refARROW, $CONFIG_FILE, $refConfig,
-			$refWinConfig, $refWinPb, $refWin, $refSTR) = @_;
-  $localGeoIPDB = "$USERDIR\\GeoLiteCity.dat" if !$localGeoIPDB; # Default location
-  # Start an agent
-  my $ua = new LWP::UserAgent;
-  $ua->agent($$refConfig{'USERAGENT'});
-  $ua->default_header('Accept-Language' => 'en');
-  # Set the progress bar
-  $$refWin->ChangeCursor($$refHOURGLASS);
-  $$refWinPb->Text($$refSTR{'Downloading'}.' '.$$refSTR{'GeoIPDB2'});
-  $$refWinPb->lblPbCurr->Text($$refSTR{'connecting'}.' Maxmind...');
-  $$refWinPb->lblCount->Text("0 %");
-  $$refWinPb->pbWinPb->SetRange(0, 100);
-  $$refWinPb->pbWinPb->SetPos(0);
-  $$refWinPb->pbWinPb->SetStep(1);
-  $$refWinPb->Center($$refWin);
-  $$refWinPb->Show();
-  # Check size of the remote file
-  if (!$TOTAL_SIZE) {
-    my $req    = new HTTP::Request HEAD => $GEOIPDB_URL;
-    my $res    = $ua->request($req);
-    my $return = $res->status_line;
-    if ($res->code == 200) { $TOTAL_SIZE = $res->header('content_length'); }
-    else {
-      # Turn off progress bar
-      $$refWin->ChangeCursor($$refARROW);
-      $$refWinPb->lblPbCurr->Text('');
-      $$refWinPb->lblCount->Text('');
-      $$refWinPb->pbWinPb->SetPos(0);
-      $$refWinPb->Hide();
-      return("$$refSTR{'errorMsg'}: $$refSTR{'errorConRemote'}...");
-    }
-  }
-  # Download the file
-  if ($TOTAL_SIZE) {
-    my $downloadData;
-    # Download the file
-    $$refWinPb->lblPbCurr->Text($$refSTR{'Downloading'}.' '.$$refSTR{'GeoIPDB2'}.'...');
-    my $response = $ua->get($GEOIPDB_URL, ':content_cb' => sub {
-      # Local variables
-      my ($data, $response, $protocol) = @_;
-      $downloadData       .= $data;                                     # Downloaded data
-      my $totalDownloaded  = length($downloadData);                     # Size of downloaded data
-      my $completed        = int($totalDownloaded / $TOTAL_SIZE * 100); # Pourcentage of download completed
-      $$refWinPb->pbWinPb->SetPos($completed);    # Set the progress bar
-      $$refWinPb->lblCount->Text("$completed %"); # Indicate purcentage
-    });
-    # Save data in a temp file
-    my $GeoIPGZIP = $localGeoIPDB . '.gz';
-    if ($response and $response->is_success) {
-      open(GEOIPGZ,">$GeoIPGZIP");
-      binmode(GEOIPGZ);
-      print GEOIPGZ $downloadData;
-      close(GEOIPGZ);
-    }
-    $downloadData = undef;
-    # Uncompress GEOIP GZIP
-    my ($error, $msg);
-    if (-e $GeoIPGZIP) {
-      $TOTAL_SIZE = 0;
-      if (gunzip $GeoIPGZIP => $localGeoIPDB, BinModeOut => 1) {
-        if (&validGeoIPDB($localGeoIPDB)) {
-          unlink $GeoIPGZIP;
-          $$refWinConfig->tfGeoIPDB->Text($localGeoIPDB);
-          $$refConfig{'GEOIP_DB_FILE'} = $localGeoIPDB;
-          &saveConfig($CONFIG_FILE, $refConfig);
-        } else { $error = 1; $msg = "$$refSTR{'errorMsg'}: $$refSTR{'invalidFile'}"; }
-      } else { $error = 1; $msg = "$$refSTR{'errorMsg'}: $GunzipError"; }
-    } else { $error = 1; $msg = "$$refSTR{'errorMsg'}: $$refSTR{'errorDownload'}..."; }
-    # Turn off progress bar
-    $$refWin->ChangeCursor($$refARROW);
-    $$refWinPb->lblPbCurr->Text('');
-    $$refWinPb->lblCount->Text('');
-    $$refWinPb->pbWinPb->SetPos(0);
-    $$refWinPb->Hide();
-    # Final message
-    if ($error) { return($msg); } # Error
-    else        { return(0);    }
-  } else {
-    # Turn off progress bar
-    $$refWin->ChangeCursor($$refARROW);
-    $$refWinPb->lblPbCurr->Text('');
-    $$refWinPb->lblCount->Text('');
-    $$refWinPb->pbWinPb->SetPos(0);
-    $$refWinPb->Hide();
-    return("$$refSTR{'errorMsg'}: $$refSTR{'errorDownload'}...");
-  }
-  $TOTAL_SIZE = 0;
-  
-}  #--- End downloadGeoIPDB
 
 #--------------------------#
 sub createExprHistoDB
@@ -766,12 +780,12 @@ sub loadExprHistoDB
 		$exprHistoDBFile = encode('utf8', $exprHistoDBFile);
     my $dsn = "DBI:SQLite:dbname=$exprHistoDBFile";
     my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
-              or Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.$DBI::errstr, $$refSTR{'error'}, 0x40010);
+              or Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.$DBI::errstr, $$refSTR{'Error'}, 0x40010);
     # Check if EXPR_HISTO_DB table exists
     my $sth;
     eval { $sth = $dbh->table_info(undef, undef, '%', 'TABLE'); };
     if ($@) {
-      Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.$DBI::errstr, $$refSTR{'error'}, 0x40010);
+      Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.$DBI::errstr, $$refSTR{'Error'}, 0x40010);
       return(0);
     }
     my @info = $sth->fetchrow_array;
@@ -811,7 +825,7 @@ sub loadExprHistoDB
       $$refWinExtraction->gridExprHistory->ExpandLastColumn();
       $dbh->disconnect();
       return(1);
-    } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorDB'}, $$refSTR{'error'}, 0x40010); return(0); }
+    } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorDB'}, $$refSTR{'Error'}, 0x40010); return(0); }
   } else { return(0); }
 
 }  #--- End loadExprHistoDB
@@ -854,12 +868,12 @@ sub loadExprDB
 		$exprHistoDBFile = encode('utf8', $exprHistoDBFile);
     my $dsn 				 = "DBI:SQLite:dbname=$exprHistoDBFile";
     my $dbh 				 = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
-										 or Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.$DBI::errstr, $$refSTR{'error'}, 0x40010);
+										 or Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.$DBI::errstr, $$refSTR{'Error'}, 0x40010);
     # Check if EXPR_DB table exists
     my $sth;
     eval { $sth = $dbh->table_info(undef, undef, '%', 'TABLE'); };
     if ($@) {
-      Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.$DBI::errstr, $$refSTR{'error'}, 0x40010);
+      Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.$DBI::errstr, $$refSTR{'Error'}, 0x40010);
       return(0);
     }
     my @info = $sth->fetchrow_array;
@@ -897,336 +911,10 @@ sub loadExprDB
       $$refWinExtraction->gridExprDatabase->ExpandLastColumn();
       $dbh->disconnect();
       return(1);
-    } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorDB'}, $$refSTR{'error'}, 0x40010); return(0); }
+    } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorDB'}, $$refSTR{'Error'}, 0x40010); return(0); }
   } else { return(0); }
 
 }  #--- End loadExprDB
-
-#--------------------------#
-sub validExprHistoDB
-#--------------------------#
-{
-  # Local variables
-  my $exprHistoDBFile = shift;
-  if (-f $exprHistoDBFile) {
-    # Connect to DB
-		$exprHistoDBFile = encode('utf8', $exprHistoDBFile);
-    my $dsn 				 = "DBI:SQLite:dbname=$exprHistoDBFile";
-    if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
-      my $sth;
-      eval { $sth = $dbh->table_info(undef, undef, '%', 'TABLE'); };
-      return(0) if $@;
-      # If table EXPR_HISTO_DB exists, database is valid
-      my @info = $sth->fetchrow_array;
-      $sth->finish();
-      return(1) if $info[2] and $info[2] eq 'EXPR_HISTO_DB';
-    }
-  }
-  return(0);
-  
-}  #--- End validExprHistoDB
-
-#--------------------------#
-sub validExprDB
-#--------------------------#
-{
-  # Local variables
-  my $exprDBFile = shift;
-  if (-f $exprDBFile) {
-    # Connect to DB
-		$exprDBFile = encode('utf8', $exprDBFile);
-    my $dsn = "DBI:SQLite:dbname=$exprDBFile";
-    if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
-      my $sth;
-      eval { $sth = $dbh->table_info(undef, undef, '%', 'TABLE'); };
-      return(0) if $@;
-      # If table EXPR_DB exists, database is valid
-      my @info = $sth->fetchrow_array;
-      $sth->finish();
-      return(1) if $info[2] and $info[2] eq 'EXPR_DB';
-    }
-  }
-  return(0);
-  
-}  #--- End validExprDB
-
-#--------------------------#
-sub validLFDB
-#--------------------------#
-{
-  # Local variables
-  my $LFDBFile = shift;
-  if (-f $LFDBFile) {
-    # Connect to DB
-		$LFDBFile = encode('utf8', $LFDBFile);
-    my $dsn 	= "DBI:SQLite:dbname=$LFDBFile";
-    if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
-      my $sth;
-      eval { $sth = $dbh->table_info(undef, undef, '%', 'TABLE'); };
-      return(0) if $@;
-      # If table LF exists, database is valid
-      my @info = $sth->fetchrow_array;
-      $sth->finish();
-      return(1) if $info[2] and $info[2] eq 'LF';
-    }
-  }
-  return(0);
-  
-}  #--- End validLFDB
-
-#--------------------------#
-sub downloadLFDB
-#--------------------------#
-{
-  # Local variables
-  my ($localMACOUIDB, $USERDIR, $refHOURGLASS, $refARROW, $CONFIG_FILE, $refConfig,
-			$refWinConfig, $refWinLFDB, $refWinLFObj, $refWinPb, $refWin, $refSTR) = @_;
-  my $localLFDB = shift; # Default location
-  # Show progress window
-  $$refWin->ChangeCursor($$refHOURGLASS);
-  $$refWinPb->Text($$refSTR{'downloadLFDB'});
-  $$refWinPb->lblPbCurr->Text($$refSTR{'connecting'}.' le-tools.com...');
-  $$refWinPb->lblCount->Text("0 %");
-  $$refWinPb->pbWinPb->SetRange(0, 100);
-  $$refWinPb->pbWinPb->SetPos(0);
-  $$refWinPb->pbWinPb->SetStep(1);
-  $$refWinPb->Center($$refWin);
-  $$refWinPb->Show();
-  # Start an agent
-  my $ua = new LWP::UserAgent;
-  $ua->agent($$refConfig{'USERAGENT'});
-  $ua->default_header('Accept-Language' => 'en');
-  # Check size of the remote file
-  my $req    = new HTTP::Request HEAD => $LFDB_URL;
-  my $res    = $ua->request($req);
-  my $return = $res->status_line;
-  if ($res->code == 200) { $TOTAL_SIZE = $res->header('content_length'); }
-  else {
-    # Hide progress window
-    $$refWin->ChangeCursor($$refARROW);
-    $$refWinPb->lblPbCurr->Text('');
-    $$refWinPb->lblCount->Text('');
-    $$refWinPb->pbWinPb->SetPos(0);
-    $$refWinPb->Hide();
-    return("$$refSTR{'errorMsg'}: $$refSTR{'errorConRemote'}...");
-  }
-  # Download the file
-  if ($TOTAL_SIZE) {
-    my $downloadData;
-    # Download the file
-    $$refWinPb->lblPbCurr->Text($$refSTR{'downloadLFDB'}.'...');
-    my $response = $ua->get($LFDB_URL, ':content_cb' => sub {
-      # Local variables
-      my ($data, $response, $protocol) = @_;
-      $downloadData       .= $data;                                     # Downloaded data
-      my $totalDownloaded  = length($downloadData);                     # Size of downloaded data
-      my $completed        = int($totalDownloaded / $TOTAL_SIZE * 100); # Pourcentage of download completed
-      $$refWinPb->pbWinPb->SetPos($completed);    # Set the progress bar
-      $$refWinPb->lblCount->Text("$completed %"); # Indicate purcentage
-    });
-    # Save data in a temp file
-    my $LFDB_ZIP = $localLFDB."\.zip";
-    if ($response and $response->is_success) {
-      open(ZIP,">$LFDB_ZIP");
-      binmode(ZIP);
-      print ZIP $downloadData;
-      close(ZIP);
-    } else {
-      # Hide progress window
-      $$refWin->ChangeCursor($$refARROW);
-      $$refWinPb->lblPbCurr->Text('');
-      $$refWinPb->lblCount->Text('');
-      $$refWinPb->pbWinPb->SetPos(0);
-      $$refWinPb->Hide();
-      return("$$refSTR{'errorMsg'}: $$refSTR{'errorConRemote'}...");
-    }
-    # Uncompress LFDB ZIP
-    my ($error, $msg);
-    if (-e $LFDB_ZIP) {
-      $TOTAL_SIZE = 0;
-      if (unzip $LFDB_ZIP => $localLFDB, BinModeOut => 1) {
-        if (&validLFDB($localLFDB)) {
-          unlink $LFDB_ZIP;
-          $$refWinConfig->tfLFDB->Text($localLFDB);
-          $$refConfig{'LF_DB_FILE'} = $localLFDB;
-          &saveConfig($CONFIG_FILE, $refConfig);
-          # Load the Log format database
-					if (!$$refWinLFDB) {
-						&createWinLFDB(0);
-						&createWinLFObj() if !$$refWinLFObj;
-					}
-          &loadLFDB($localLFDB, $refWinLFDB, $refWin, $refSTR);
-          &cbInputLFFormatAddITems();
-          $$refWin->cbLF->SetCurSel(0);
-        } else { $error = 1; $msg = "$$refSTR{'errorMsg'}: $$refSTR{'invalidFile'}"; }
-      } else { $error = 1; $msg = "$$refSTR{'errorMsg'}: $UnzipError"; }
-    } else { $error = 1; $msg = "$$refSTR{'errorMsg'}: $$refSTR{'errorDownload'}..."; }
-    # Turn off progress bar
-    $$refWin->ChangeCursor($$refARROW);
-    $$refWinPb->lblPbCurr->Text('');
-    $$refWinPb->lblCount->Text('');
-    $$refWinPb->pbWinPb->SetPos(0);
-    $$refWinPb->Hide();
-    # Final message
-    if ($error) { return($msg); } # Error
-    else        { return(0);    }
-  } else {
-    # Hide progress window
-    $$refWin->ChangeCursor($$refARROW);
-    $$refWinPb->lblPbCurr->Text('');
-    $$refWinPb->lblCount->Text('');
-    $$refWinPb->pbWinPb->SetPos(0);
-    $$refWinPb->Hide();
-    return("$$refSTR{'errorMsg'}: $$refSTR{'errorDownload'}...");
-  }
-
-}  #--- End downloadLFDB
-
-#--------------------------#
-sub validXLWHOISDB
-#--------------------------#
-{
-  # Local variables
-  my $XLWHOISDBFile = shift;
-  if (-f $XLWHOISDBFile) {
-    # Connect to DB
-		$XLWHOISDBFile = encode('utf8', $XLWHOISDBFile);
-    my $dsn 			 = "DBI:SQLite:dbname=$XLWHOISDBFile";
-    if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
-      my $sth;
-      eval { $sth = $dbh->table_info(undef, undef, '%', 'TABLE'); };
-      return(0) if $@;
-      # If table WHOIS_DB exists, database is valid
-      my @info = $sth->fetchrow_array;
-      $sth->finish();
-      return(1) if $info[2] and $info[2] eq 'WHOIS_DB';
-    }
-  }
-  return(0);
-  
-}  #--- End validXLWHOISDB
-
-#--------------------------#
-sub validIINDB
-#--------------------------#
-{
-  # Local variables
-  my $IINDBFile = shift;
-  if (-f $IINDBFile) {
-    # Connect to DB
-    my $dsn = "DBI:SQLite:dbname=$IINDBFile";
-    if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
-      my $sth;
-      eval { $sth = $dbh->table_info(undef, undef, '%', 'TABLE'); };
-      return(0) if $@;
-      # If table IIN exists, database is valid
-      my @info = $sth->fetchrow_array;
-      $sth->finish();
-      return(1) if $info[2] and $info[2] eq 'IIN';
-    }
-  }
-  return(0);
-  
-}  #--- End validIINDB
-
-#--------------------------#
-sub downloadIINDB
-#--------------------------#
-{
-  # Local variables
-  my ($localIINDB, $USERDIR, $refHOURGLASS, $refARROW, $CONFIG_FILE, $refConfig,
-			$refWinConfig, $refWinPb, $refWin, $refSTR) = @_;
-  # Show progress window
-  $$refWin->ChangeCursor($$refHOURGLASS);
-  $$refWinPb->Text($$refSTR{'Downloading'}.' '.$$refSTR{'IINLocalDB2'});
-  $$refWinPb->lblPbCurr->Text($$refSTR{'connecting'}.' le-tools.com...');
-  $$refWinPb->lblCount->Text("0 %");
-  $$refWinPb->pbWinPb->SetRange(0, 100);
-  $$refWinPb->pbWinPb->SetPos(0);
-  $$refWinPb->pbWinPb->SetStep(1);
-  $$refWinPb->Center($$refWin);
-  $$refWinPb->Show();
-  # Start an agent
-  my $ua = new LWP::UserAgent;
-  $ua->agent($$refConfig{'USERAGENT'});
-  $ua->default_header('Accept-Language' => 'en');
-  # Check size of the remote file
-  my $req    = new HTTP::Request HEAD => $IINDB_URL;
-  my $res    = $ua->request($req);
-  my $return = $res->status_line;
-  if ($res->code == 200) { $TOTAL_SIZE = $res->header('content_length'); }
-  else {
-    # Hide progress window
-    $$refWin->ChangeCursor($$refARROW);
-    $$refWinPb->lblPbCurr->Text('');
-    $$refWinPb->lblCount->Text('');
-    $$refWinPb->pbWinPb->SetPos(0);
-    $$refWinPb->Hide();
-    return("$$refSTR{'errorMsg'}: $$refSTR{'errorConRemote'}...");
-  }
-  # Download the file
-  if ($TOTAL_SIZE) {
-    my $downloadData;
-    # Download the file
-    $$refWinPb->lblPbCurr->Text($$refSTR{'Downloading'}.' '.$$refSTR{'IINLocalDB2'}.'...');
-    my $response = $ua->get($IINDB_URL, ':content_cb' => sub {
-      # Local variables
-      my ($data, $response, $protocol) = @_;
-      $downloadData       .= $data;                                     # Downloaded data
-      my $totalDownloaded  = length($downloadData);                     # Size of downloaded data
-      my $completed        = int($totalDownloaded / $TOTAL_SIZE * 100); # Pourcentage of download completed
-      $$refWinPb->pbWinPb->SetPos($completed);    # Set the progress bar
-      $$refWinPb->lblCount->Text("$completed %"); # Indicate purcentage
-    });
-    # Save data in a temp file
-    my $IINDB_ZIP = $localIINDB."\.zip";
-    if ($response and $response->is_success) {
-      open(ZIP,">$IINDB_ZIP");
-      binmode(ZIP);
-      print ZIP $downloadData;
-      close(ZIP);
-    } else {
-      # Hide progress window
-      $$refWin->ChangeCursor($$refARROW);
-      $$refWinPb->lblPbCurr->Text('');
-      $$refWinPb->lblCount->Text('');
-      $$refWinPb->pbWinPb->SetPos(0);
-      $$refWinPb->Hide();
-      return("$$refSTR{'errorMsg'}: $$refSTR{'errorConRemote'}...");
-    }
-    # Uncompress IINDB ZIP
-    my ($error, $msg);
-    if (-e $IINDB_ZIP) {
-      $TOTAL_SIZE = 0;
-      if (unzip $IINDB_ZIP => $localIINDB, BinModeOut => 1) {
-        if (&validIINDB($localIINDB)) {
-          unlink $IINDB_ZIP;
-          $$refWinConfig->tfIINDB->Text($localIINDB);
-          $$refConfig{'IIN_DB_FILE'} = $localIINDB;
-          &saveConfig($CONFIG_FILE, $refConfig);
-        } else { $error = 1; $msg = "$$refSTR{'errorMsg'}: $$refSTR{'invalidFile'}"; }
-      } else { $error = 1; $msg = "$$refSTR{'errorMsg'}: $UnzipError"; }
-    } else { $error = 1; $msg = "$$refSTR{'errorMsg'}: $$refSTR{'errorDownload'}..."; }
-    # Turn off progress bar
-    $$refWin->ChangeCursor($$refARROW);
-    $$refWinPb->lblPbCurr->Text('');
-    $$refWinPb->lblCount->Text('');
-    $$refWinPb->pbWinPb->SetPos(0);
-    $$refWinPb->Hide();
-    # Final message
-    if ($error) { return($msg); } # Error
-    else        { return(0);    }
-  } else {
-    # Hide progress window
-    $$refWin->ChangeCursor($$refARROW);
-    $$refWinPb->lblPbCurr->Text('');
-    $$refWinPb->lblCount->Text('');
-    $$refWinPb->pbWinPb->SetPos(0);
-    $$refWinPb->Hide();
-    return("$$refSTR{'errorMsg'}: $$refSTR{'errorDownload'}...");
-  }
-
-}  #--- End downloadIINDB
 
 #--------------------------#
 sub validTLDDB
@@ -1239,439 +927,6 @@ sub validTLDDB
   return(0);
   
 }  #--- End validTLDDB
-
-#--------------------------#
-sub updateTLDDB
-#--------------------------#
-{
-  # Local variables
-	my ($confirm, $VERSION, $localTLDDB, $refHOURGLASS, $refARROW, $CONFIG_FILE, $refConfig, $refWinConfig, $refWinPb, $refWin,
-			$refSTR) = @_;
-  my ($upToDate, $return, $dateLocalFile, $dateRemoteFile) = &checkDateTLDDB($confirm, $localTLDDB, $refConfig, $refWinConfig);
-  # Values for $upToDate
-  # 0: Whois Server Database doesn't exist  
-  # 1: Database is up to date
-  # 2: Database is outdated
-  # 3: Error connection
-  # 4: Unknown error
-
-  # TLD Database is outdated or doesn't exist
-  if (!$upToDate or $upToDate == 2) {
-    my $msg;
-    if ($dateLocalFile and $dateRemoteFile) {
-      Encode::from_to($dateRemoteFile, 'utf8', 'iso-8859-1');
-      $msg = "$$refSTR{'currDBDate'}: $dateLocalFile\n$$refSTR{'remoteDBDate'} publicsuffix.org: $dateRemoteFile\n\n$$refSTR{'updateAvailable'} ?";
-    } else { $msg = "$$refSTR{'TLDDBNotExist'} ?"; }
-    my $answer = Win32::GUI::MessageBox($$refWin, $msg, $$refSTR{'update3'}.' '.$$refSTR{'lblTLDDB'}, 0x1024);
-    # Answer is No (7)
-    if ($answer == 7) { return(0); }
-    # Answer is Yes, download the update
-    else { &downloadTLDDB(1, $VERSION, $localTLDDB, $refHOURGLASS, $refARROW, $CONFIG_FILE, $refConfig,
-													$refWinConfig, $refWinPb, $refWin, $refSTR); }
-  # TLDDB is up to date, show message if $confirm == 1
-  } elsif ($upToDate == 1) {
-    if ($confirm) {
-      Encode::from_to($dateRemoteFile, 'utf8', 'iso-8859-1');
-      Win32::GUI::MessageBox($$refWin, "$$refSTR{'currDBDate'}: $dateLocalFile\n$$refSTR{'remoteDBDate'} publicsuffix.org: ".
-                                       "$dateRemoteFile\n\n$$refSTR{'DBUpToDate'} !", $$refSTR{'updateTLDDB'}, 0x40040);
-    }
-  # Connection error, show message if $confirm == 1
-  } elsif (($upToDate == 3 or $upToDate == 4) and $confirm) {
-    if ($upToDate == 3) { Win32::GUI::MessageBox($$refWin, "$$refSTR{'errConnection'}: $return", $$refSTR{'error'}, 0x40010); }
-    else                { Win32::GUI::MessageBox($$refWin, "$$refSTR{'errUnknown'}: $return", $$refSTR{'error'}   , 0x40010); }
-  }
-
-}  #--- End updateTLDDB
-
-#--------------------------#
-sub checkDateTLDDB
-#--------------------------#
-{
-  # Local variables
-  my ($confirm, $localTLDDB, $refConfig, $refWinConfig) = @_;
-  my $lastModifDate;
-  # TLD Database doesn't exist or invalid file
-  return(0, undef, undef, undef) if !$localTLDDB or !-f $localTLDDB;
-  # Check date of local file
-	my $localFileT  = DateTime->from_epoch(epoch => (stat($localTLDDB))[9]);
-  # Check date of the remote file
-  my $ua = new LWP::UserAgent;
-  $ua->agent($$refConfig{'USERAGENT'});
-  #$ua->timeout($CONFIG{'NSLOOKUP_TIMEOUT'});
-  $ua->default_header('Accept-Language' => 'en');
-  my $req    = new HTTP::Request HEAD => $TLDDB_URL;
-  my $res    = $ua->request($req);
-  my $return = $res->status_line;
-  if ($res->code == 200) {
-    $lastModifDate = $res->header('last-modified');
-    $TOTAL_SIZE    = $res->header('content_length');
-  } else { return(3, $return, undef, undef); } # Error connection
-  # Compare local et remote file date
-  my $strp2 = DateTime::Format::Strptime->new(pattern => '%a, %d %b %Y %T %Z');
-  if (my $lastModifT = $strp2->parse_datetime($lastModifDate)) {
-    my $cmp = DateTime->compare($localFileT, $lastModifT);
-    if ($cmp > -1) { return(1, $return, $localFileT->ymd(), $lastModifT->ymd()); } # TLDDB is up to date 
-    else           { return(2, $return, $localFileT->ymd(), $lastModifT->ymd()); } # TLDDB is outdated
-  } else           { return(3, $return, undef             , undef             ); } # Connection error
-
-}  #--- End checkDateTLDDB
-
-#--------------------------#
-sub downloadTLDDB
-#--------------------------#
-{
-  # Local variables
-  my ($confirm, $VERSION, $localTLDDB, $refHOURGLASS, $refARROW, $CONFIG_FILE, $refConfig, $refWinConfig,
-			$refWinPb, $refWin, $refSTR) = @_;
-	# If $confirm == 1, show status in a popup, else return status
-  # Start an agent
-  my $ua = new LWP::UserAgent;
-  $ua->agent($$refConfig{'USERAGENT'});
-  $ua->timeout($$refConfig{'NSLOOKUP_TIMEOUT'});
-  $ua->default_header('Accept-Language' => 'en');
-  # Set the progress bar
-  $$refWin->ChangeCursor($$refHOURGLASS);
-  $$refWinPb->lblPbCurr->Text($$refSTR{'connecting'}.' publicsuffix.org...');
-  $$refWinPb->lblCount->Text("0 %");
-  $$refWinPb->pbWinPb->SetRange(0, 100);
-  $$refWinPb->pbWinPb->SetPos(0);
-  $$refWinPb->pbWinPb->SetStep(1);
-  $$refWinPb->Center($$refWin);
-  $$refWinPb->Show();
-  # Check size of the remote file
-  if (!$TOTAL_SIZE) {
-    my $req    = new HTTP::Request HEAD => $TLDDB_URL;
-    my $res    = $ua->request($req);
-    my $return = $res->status_line;
-    if ($res->code == 200) { $TOTAL_SIZE = $res->header('content_length'); }
-    else {
-      # Turn off progress bar
-      $$refWin->ChangeCursor($$refARROW);
-      $$refWinPb->lblPbCurr->Text('');
-      $$refWinPb->lblCount->Text('');
-      $$refWinPb->pbWinPb->SetPos(0);
-      &winPb_Terminate;
-      if ($confirm) {
-        Win32::GUI::MessageBox($$refWin, "$$refSTR{'errorMsg'}: $$refSTR{'errConnection'}...", $$refSTR{'error'}, 0x40010);
-      } else { return($$refSTR{'errConnection'}); }
-    }
-  }
-  # Download the file
-  if ($TOTAL_SIZE) {
-    my $downloadData;
-    # Download the file
-    $$refWinPb->Text($$refSTR{'Downloading'}.' '.$$refSTR{'lblTLDDB'}.'...');
-    $$refWinPb->lblPbCurr->Text($$refSTR{'Downloading'}.' '.$$refSTR{'lblTLDDB'}.'...');
-    my $response = $ua->get($TLDDB_URL, ':content_cb' => sub {
-      # Local variables
-      my ($data, $response, $protocol) = @_;
-      $downloadData       .= $data;                                     # Downloaded data
-      my $totalDownloaded  = length($downloadData);                     # Size of downloaded data
-      my $completed        = int($totalDownloaded / $TOTAL_SIZE * 100); # Pourcentage of download completed
-      $$refWinPb->pbWinPb->SetPos($completed);    # Set the progress bar
-      $$refWinPb->lblCount->Text("$completed %"); # Indicate purcentage
-    });
-    # Save data in a file
-    if ($response and $response->is_success) {
-      open(TLDDB,">$localTLDDB");
-      print TLDDB $downloadData;
-      close(TLDDB);
-    }
-    $downloadData = undef;
-    # Finished
-    if (-T $localTLDDB) {
-      # Turn off progress bar
-      $$refWin->ChangeCursor($$refARROW);
-      $$refWinPb->lblPbCurr->Text('');
-      $$refWinPb->lblCount->Text('');
-      $$refWinPb->pbWinPb->SetPos(0);
-      &winPb_Terminate;
-      # Update Config
-      $$refWinConfig->tfTLDDB->Text($localTLDDB);
-      $$refConfig{'TLD_DB_FILE'} = $localTLDDB;
-      if ($confirm) {
-        &saveConfig($CONFIG_FILE, $refConfig);
-        Win32::GUI::MessageBox($$refWinConfig, $$refSTR{'updatedTLDDB'}, "XL-Parser $VERSION", 0x40040);
-      }
-    } else {
-      # Turn off progress bar
-      $$refWin->ChangeCursor($$refARROW);
-      $$refWinPb->lblPbCurr->Text('');
-      $$refWinPb->lblCount->Text('');
-      $$refWinPb->pbWinPb->SetPos(0);
-      &winPb_Terminate;
-      if ($confirm) {
-        Win32::GUI::MessageBox($$refWin, "$$refSTR{'errorMsg'}: $$refSTR{'errDownloadTLDDB'}...", $$refSTR{'error'}, 0x40010);
-      } else { return($$refSTR{'errDownloadTLDDB'}); }
-    }
-  } else {
-    # Turn off progress bar
-    $$refWin->ChangeCursor($$refARROW);
-    $$refWinPb->lblPbCurr->Text('');
-    $$refWinPb->lblCount->Text('');
-    $$refWinPb->pbWinPb->SetPos(0);
-    &winPb_Terminate;
-    if ($confirm) {
-      Win32::GUI::MessageBox($$refWin, "$$refSTR{'errorMsg'}: $$refSTR{'errDownloadTLDDB'}...", $$refSTR{'error'}, 0x40010);
-    } else { return($$refSTR{'errDownloadTLDDB'}); }
-  }
-  $TOTAL_SIZE = 0;
-  
-}  #--- End downloadTLDDB
-
-#--------------------------#
-sub validResTLDDB
-#--------------------------#
-{
-  # Local variables
-  my $resTLDDBFile = shift;
-  if (-f $resTLDDBFile) {
-    # Connect to DB
-		$resTLDDBFile = encode('utf8', $resTLDDBFile);
-    my $dsn 			= "DBI:SQLite:dbname=$resTLDDBFile";
-    if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
-      my $sth;
-      eval { $sth = $dbh->table_info(undef, undef, '%', 'TABLE'); };
-      return(0) if $@;
-      # If table DATA exists, database is valid
-      my @info = $sth->fetchrow_array;
-      $sth->finish();
-      return(1) if $info[2] and $info[2] eq 'DATA';
-    }
-  }
-  return(0);
-  
-}  #--- End validResTLDDB
-
-#--------------------------#
-sub downloadResTLDDB
-#--------------------------#
-{
-  # Local variables
-  my ($localResTLDDB, $USERDIR, $refHOURGLASS, $refARROW, $CONFIG_FILE, $refConfig, $refWinConfig,
-			$refWinPb, $refWin, $refSTR) = @_;
-  # Show progress window
-  $$refWin->ChangeCursor($$refHOURGLASS);
-  $$refWinPb->Text($$refSTR{'Downloading'}.' '.$$refSTR{'ResTLDDB'});
-  $$refWinPb->lblPbCurr->Text($$refSTR{'connecting'}.' le-tools.com...');
-  $$refWinPb->lblCount->Text("0 %");
-  $$refWinPb->pbWinPb->SetRange(0, 100);
-  $$refWinPb->pbWinPb->SetPos(0);
-  $$refWinPb->pbWinPb->SetStep(1);
-  $$refWinPb->Center($$refWin);
-  $$refWinPb->Show();
-  # Start an agent
-  my $ua = new LWP::UserAgent;
-  $ua->agent($$refConfig{'USERAGENT'});
-  $ua->default_header('Accept-Language' => 'en');
-  # Check size of the remote file
-  my $req    = new HTTP::Request HEAD => $RESTLDDB_URL;
-  my $res    = $ua->request($req);
-  my $return = $res->status_line;
-  if ($res->code == 200) { $TOTAL_SIZE = $res->header('content_length'); }
-  else {
-    # Hide progress window
-    $$refWin->ChangeCursor($$refARROW);
-    $$refWinPb->lblPbCurr->Text('');
-    $$refWinPb->lblCount->Text('');
-    $$refWinPb->pbWinPb->SetPos(0);
-    $$refWinPb->Hide();
-    return("$$refSTR{'errorMsg'}: $$refSTR{'errorConRemote'}...");
-  }
-  # Download the file
-  if ($TOTAL_SIZE) {
-    my $downloadData;
-    # Download the file
-    $$refWinPb->lblPbCurr->Text($$refSTR{'Downloading'}.' '.$$refSTR{'ResTLDDB'}.'...');
-    my $response = $ua->get($RESTLDDB_URL, ':content_cb' => sub {
-      # Local variables
-      my ($data, $response, $protocol) = @_;
-      $downloadData       .= $data;                                     # Downloaded data
-      my $totalDownloaded  = length($downloadData);                     # Size of downloaded data
-      my $completed        = int($totalDownloaded / $TOTAL_SIZE * 100); # Pourcentage of download completed
-      $$refWinPb->pbWinPb->SetPos($completed);    # Set the progress bar
-      $$refWinPb->lblCount->Text("$completed %"); # Indicate purcentage
-    });
-    # Save data in a temp file
-    my $resTLDDB_ZIP = $localResTLDDB."\.zip";
-    if ($response and $response->is_success) {
-      open(ZIP,">$resTLDDB_ZIP");
-      binmode(ZIP);
-      print ZIP $downloadData;
-      close(ZIP);
-    } else {
-      # Hide progress window
-      $$refWin->ChangeCursor($$refARROW);
-      $$refWinPb->lblPbCurr->Text('');
-      $$refWinPb->lblCount->Text('');
-      $$refWinPb->pbWinPb->SetPos(0);
-      $$refWinPb->Hide();
-      return("$$refSTR{'errorMsg'}: $$refSTR{'errorConRemote'}...");
-    }
-    # Uncompress TLDDB ZIP
-    my ($error, $msg);
-    if (-e $resTLDDB_ZIP) {
-      $TOTAL_SIZE = 0;
-      if (unzip $resTLDDB_ZIP => $localResTLDDB, BinModeOut => 1) {
-        if (&validResTLDDB($localResTLDDB)) {
-          unlink $resTLDDB_ZIP;
-          $$refWinConfig->tfResTLDDB->Text($localResTLDDB);
-          $$refConfig{'RES_TLD_DB_FILE'} = $localResTLDDB;
-          &saveConfig($CONFIG_FILE, $refConfig);
-        } else { $error = 1; $msg = "$$refSTR{'errorMsg'}: $$refSTR{'invalidFile'}"; }
-      } else { $error = 1; $msg = "$$refSTR{'errorMsg'}: $UnzipError"; }
-    } else { $error = 1; $msg = "$$refSTR{'errorMsg'}: $$refSTR{'errorDownload'}..."; }
-    # Turn off progress bar
-    $$refWin->ChangeCursor($$refARROW);
-    $$refWinPb->lblPbCurr->Text('');
-    $$refWinPb->lblCount->Text('');
-    $$refWinPb->pbWinPb->SetPos(0);
-    $$refWinPb->Hide();
-    # Final message
-    if ($error) { return($msg); } # Error
-    else        { return(0);    }
-  } else {
-    # Hide progress window
-    $$refWin->ChangeCursor($$refARROW);
-    $$refWinPb->lblPbCurr->Text('');
-    $$refWinPb->lblCount->Text('');
-    $$refWinPb->pbWinPb->SetPos(0);
-    $$refWinPb->Hide();
-    return("$$refSTR{'errorMsg'}: $$refSTR{'errorDownload'}...");
-  }
-
-}  #--- End downloadResTLDDB
-
-#--------------------------#
-sub validDTDB
-#--------------------------#
-{
-  # Local variables
-  my $DTDBFile = shift;
-  if (-f $DTDBFile) {
-    # Connect to DB
-		$DTDBFile = encode('utf8', $DTDBFile);
-    my $dsn 	= "DBI:SQLite:dbname=$DTDBFile";
-    if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
-      my $sth;
-      eval { $sth = $dbh->table_info(undef, undef, '%', 'TABLE'); };
-      return(0) if $@;
-      # If table DT exists, database is valid
-      my @info = $sth->fetchrow_array;
-      $sth->finish();
-      return(1) if $info[2] and $info[2] eq 'DT';
-    }
-  }
-  return(0);
-  
-}  #--- End validDTDB
-
-#--------------------------#
-sub downloadDTDB
-#--------------------------#
-{
-  # Local variables
-  my ($localDTDB, $USERDIR, $refHOURGLASS, $refARROW, $CONFIG_FILE, $refConfig, $refWinConfig,
-			$refWinLFObj, $refWinDTDB, $refWinReport, $refWinPb, $refWin, $refSTR) = @_;
-	&createWinDTDB(0) if !$$refWinDTDB;
-  # Show progress window
-  $$refWin->ChangeCursor($$refHOURGLASS);
-  $$refWinPb->Text($$refSTR{'Downloading'}.' '.$$refSTR{'winDTDB'});
-  $$refWinPb->lblPbCurr->Text($$refSTR{'connecting'}.' le-tools.com...');
-  $$refWinPb->lblCount->Text("0 %");
-  $$refWinPb->pbWinPb->SetRange(0, 100);
-  $$refWinPb->pbWinPb->SetPos(0);
-  $$refWinPb->pbWinPb->SetStep(1);
-  $$refWinPb->Center($$refWin);
-  $$refWinPb->Show();
-  # Start an agent
-  my $ua = new LWP::UserAgent;
-  $ua->agent($$refConfig{'USERAGENT'});
-  $ua->default_header('Accept-Language' => 'en');
-  # Check size of the remote file
-  my $req    = new HTTP::Request HEAD => $DTDB_URL;
-  my $res    = $ua->request($req);
-  my $return = $res->status_line;
-  if ($res->code == 200) { $TOTAL_SIZE = $res->header('content_length'); }
-  else {
-    # Hide progress window
-    $$refWin->ChangeCursor($$refARROW);
-    $$refWinPb->lblPbCurr->Text('');
-    $$refWinPb->lblCount->Text('');
-    $$refWinPb->pbWinPb->SetPos(0);
-    $$refWinPb->Hide();
-    return("$$refSTR{'errorMsg'}: $$refSTR{'errorConRemote'}...");
-  }
-  # Download the file
-  if ($TOTAL_SIZE) {
-    my $downloadData;
-    # Download the file
-    $$refWinPb->lblPbCurr->Text($$refSTR{'Downloading'}.' '.$$refSTR{'winDTDB'}.'...');
-    my $response = $ua->get($DTDB_URL, ':content_cb' => sub {
-      # Local variables
-      my ($data, $response, $protocol) = @_;
-      $downloadData       .= $data;                                     # Downloaded data
-      my $totalDownloaded  = length($downloadData);                     # Size of downloaded data
-      my $completed        = int($totalDownloaded / $TOTAL_SIZE * 100); # Pourcentage of download completed
-      $$refWinPb->pbWinPb->SetPos($completed);    # Set the progress bar
-      $$refWinPb->lblCount->Text("$completed %"); # Indicate purcentage
-    });
-    # Save data in a temp file
-    my $DTDB_ZIP = $localDTDB."\.zip";
-    if ($response and $response->is_success) {
-      open(ZIP,">$DTDB_ZIP");
-      binmode(ZIP);
-      print ZIP $downloadData;
-      close(ZIP);
-    } else {
-      # Hide progress window
-      $$refWin->ChangeCursor($$refARROW);
-      $$refWinPb->lblPbCurr->Text('');
-      $$refWinPb->lblCount->Text('');
-      $$refWinPb->pbWinPb->SetPos(0);
-      $$refWinPb->Hide();
-      return("$$refSTR{'errorMsg'}: $$refSTR{'errorConRemote'}...");
-    }
-    # Uncompress DTDB ZIP
-    my ($error, $msg);
-    if (-e $DTDB_ZIP) {
-      $TOTAL_SIZE = 0;
-      if (unzip $DTDB_ZIP => $localDTDB, BinModeOut => 1) {
-        if (&validDTDB($localDTDB)) {
-          unlink $DTDB_ZIP;
-          $$refWinConfig->tfDTDB->Text($localDTDB);
-          $$refConfig{'DT_DB_FILE'} = $localDTDB;
-          &saveConfig($CONFIG_FILE, $refConfig);
-          # Load the Datetime database
-          &loadDTDB;
-          &cbInputDTFormatAddITems();
-          $$refWinLFObj->cbLFObjDT->SetCurSel(0);
-          $$refWin->cbSplitTimeFormat->SetCurSel(0);
-          &cbOutputDTFormatAddITems();
-          $$refWinReport->cbOutputDTFormat->SetCurSel(0);
-        } else { $error = 1; $msg = "$$refSTR{'errorMsg'}: $$refSTR{'invalidFile'}"; }
-      } else { $error = 1; $msg = "$$refSTR{'errorMsg'}: $UnzipError"; }
-    } else { $error = 1; $msg = "$$refSTR{'errorMsg'}: $$refSTR{'errorDownload'}..."; }
-    # Turn off progress bar
-    $$refWin->ChangeCursor($$refARROW);
-    $$refWinPb->lblPbCurr->Text('');
-    $$refWinPb->lblCount->Text('');
-    $$refWinPb->pbWinPb->SetPos(0);
-    $$refWinPb->Hide();
-    # Final message
-    if ($error) { return($msg); } # Error
-    else        { return(0);    }
-  } else {
-    # Hide progress window
-    $$refWin->ChangeCursor($$refARROW);
-    $$refWinPb->lblPbCurr->Text('');
-    $$refWinPb->lblCount->Text('');
-    $$refWinPb->pbWinPb->SetPos(0);
-    $$refWinPb->Hide();
-    return("$$refSTR{'errorMsg'}: $$refSTR{'errorDownload'}...");
-  }
-
-}  #--- End downloadDTDB
 
 #------------------------------------------------------------------------------#
 1;

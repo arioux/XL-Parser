@@ -7,11 +7,11 @@
 # GitHub      : https://github.com/arioux/XL-Parser
 # Description : Part of the XL-Toolkit, XL-Parser provides a bunch of functions for data extraction and analysis.
 # Creation    : 2016-07-15
-# Modified    : 2018-10-06
-my $VERSION   = '1.2.2';
+# Modified    : 2019-02-17
+my $VERSION   = '1.3';
 # Author      : Alain Rioux (admin@le-tools.com)
 #
-# Copyright (C) 2016-2018 Alain Rioux (le-tools.com)
+# Copyright (C) 2016-2019 Alain Rioux (le-tools.com)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -37,9 +37,6 @@ use Win32::GUI::Grid;
 use Win32::Clipboard;
 use Win32::Process;
 use Win32::DriveInfo;
-use B::Hooks::EndOfScope::PP::FieldHash;
-use B::Hooks::EndOfScope::PP;
-use Params::Validate::PP;
 use DateTime;
 use DateTime::TimeZone;
 use DateTime::Format::Duration;
@@ -48,7 +45,7 @@ use Encode qw(encode);
 use Extract::Regex; # This is a personal module
 use LWP::UserAgent;
 use DBI;
-use Geo::IP;
+use GeoIP2::Database::Reader;
 use Excel::Writer::XLSX;
 use JSON qw(encode_json decode_json);
 use threads;
@@ -63,6 +60,7 @@ require "XL-ParserAnalysis.pl";
 #------------------------------------------------------------------------------#
 # Global variables
 #------------------------------------------------------------------------------#
+$ENV{'PERL_LWP_SSL_VERIFY_HOSTNAME'} = 0;
 my $PROGDIR = $0;                                                              # Program path
 while (chop($PROGDIR) ne "\\") { }                                             # Dir only
 my $REF_ARG      = \@ARGV;                                                     # If objects passed (using SendTo)
@@ -372,7 +370,7 @@ $win->AddRadioButton( -name         => 'rbLAUpdateDB'          ,
                       -size         => [150, 22]               ,
                       -pos          => [230,350]               ,
                       -background   => [255, 255, 255]         ,
-                      -text         => $STR{'update3'}         ,
+                      -text         => $STR{'Update'}          ,
                       -font         => $font10                 ,
                       -visible      => 0                       , );
 $win->AddLabel(       -name         => 'lblLF'                 ,
@@ -393,7 +391,7 @@ $win->AddButton(      -name         => 'btnWinLFDB'            ,
                       -pos          => [373,375]               ,
                       -font         => $font10                 ,
                       -bitmap       => $LFDB16                 ,
-                      -tip          => $STR{'openLFDB'}        ,
+                      -tip          => "$STR{'OpenThe'} $STR{'LFDB'}",
                       -visible      => 0                       , );
 $win->AddButton(      -name         => 'btnLFGuess'            ,
                       -size         => [ 22, 22]               ,
@@ -433,7 +431,7 @@ $win->AddCheckbox(    -name         => 'chLAOptResISP'         ,
 $win->AddCheckbox(    -name         => 'chLAOptResGeoIP'       ,
                       -size         => [100, 22]               ,
                       -pos          => [275,  7]               ,
-                      -text         => $STR{'GeoIPDB'}         ,
+                      -text         => $STR{'GeoIP'}           ,
                       -background   => [255, 255, 255]         ,
                       -font         => $font10                 ,
                       -checked      => 0                       ,
@@ -698,7 +696,7 @@ $win->AddLabel(       -name         => 'lblCurrDBNbrResGeoIP'  ,
                       -size         => [100, 22]               ,
                       -pos          => [595,408]               ,
                       -background   => [255, 255, 255]         ,
-                      -text         => $STR{'GeoIPDB'}.':'     ,
+                      -text         => $STR{'GeoIP'}.':'       ,
                       -font         => $font10                 ,
                       -visible      => 0                       , );
 $win->AddLabel(       -name         => 'lblCurrDBNbrResGeoIPVal',
@@ -1387,7 +1385,7 @@ $winReport->AddCheckbox(      -name         => 'chReportOptIncISP'     ,
 $winReport->AddCheckbox(      -name         => 'chReportOptIncGeoIP'   ,
                               -size         => [100, 22]               ,
                               -pos          => [515,143]               ,
-                              -text         => $STR{'GeoIPDB'}         ,
+                              -text         => $STR{'GeoIP'}           ,
                               -background   => [255, 255, 255]         ,
                               -font         => $font10                 ,
                               -tabstop      => 1                       , );
@@ -1428,7 +1426,7 @@ my $winConfig = Win32::GUI::DialogBox->new( -name        => 'winConfig'         
                                             -parent      => $win                    ,
                                             -text        => $STR{'winConfig'}       ,
                                             -pos         => [$winPosX, $winPosY]    ,
-                                            -size        => [800, 330]              ,
+                                            -size        => [800, 355]              ,
                                             -background  => [255, 255, 255]         ,
                                             -hasmaximize => 0                       ,
                                             -hasminimize => 0                       ,
@@ -1516,43 +1514,57 @@ $winConfig->AddCheckbox(    -name         => 'chRememberPos'         ,
                             -text         => $STR{'chRememberPos'}   ,
                             -background   => [255, 255, 255]         ,
                             -font         => $font10                 , );
-$winConfig->AddLabel(       -name         => 'lblNsLookupTO1'        ,
+$winConfig->AddLabel(       -name         => 'lblGeoIPLang'          ,
                             -size         => [130, 22]               ,
                             -pos          => [150,168]               ,
+                            -background   => [255, 255, 255]         ,
+                            -text         => "$STR{'GeoIP'} $STR{'language'}:",
+                            -font         => $font10                 , );
+$winConfig->AddCombobox(    -name         => 'cbGeoIPLang'           ,
+                            -dropdownlist => 1                      ,
+                            -vscroll      => 1                       ,
+                            -size         => [ 60, 80]               ,
+                            -pos          => [285,166]               ,
+                            -font         => $font10                 , );
+$winConfig->cbGeoIPLang->Add('en', 'de', 'es', 'fr', 'ja', 'pt-BR', 'ru', 'zh-CN');
+$winConfig->cbGeoIPLang->SetCurSel(0);
+$winConfig->AddLabel(       -name         => 'lblNsLookupTO1'        ,
+                            -size         => [130, 22]               ,
+                            -pos          => [150,199]               ,
                             -background   => [255, 255, 255]         ,
                             -text         => $STR{'NsLookupTO1'}.':' ,
                             -font         => $font10                 , );
 $winConfig->AddTextfield(   -name         => 'tfLookupTO'            ,
                             -size         => [ 30, 24]               ,
-                            -pos          => [285,165]               ,
+                            -pos          => [285,196]               ,
                             -font         => $font10                 , );
 $winConfig->AddLabel(       -name         => 'lblNsLookupTO2'        ,
                             -size         => [ 70, 22]               ,
-                            -pos          => [320,168]               ,
+                            -pos          => [320,199]               ,
                             -background   => [255, 255, 255]         ,
                             -text         => lc($STR{'seconds'})     ,
                             -font         => $font10                 , );
 $winConfig->AddLabel(       -name         => 'lblLocalTZ'            ,
                             -size         => [120, 22]               ,
-                            -pos          => [150,201]               ,
+                            -pos          => [150,231]               ,
                             -background   => [255, 255, 255]         ,
                             -text         => $STR{'localTimezone'}.':',
                             -font         => $font10                 , );
 $winConfig->AddCombobox(    -name         => 'cbLocalTZ'             ,
                             -size         => [260,100]               ,
-                            -pos          => [285,198]               ,
+                            -pos          => [285,228]               ,
                             -font         => $font10                 ,
                             -dropdownlist => 1                       ,
                             -vscroll      => 1                       , );
 $winConfig->AddLabel(       -name         => 'lblDefaultLang'        ,
                             -size         => [120, 22]               ,
-                            -pos          => [150,231]               ,
+                            -pos          => [150,261]               ,
                             -background   => [255, 255, 255]         ,
                             -text         => $STR{'defaultLang'}.':' ,
                             -font         => $font10                 , );
 $winConfig->AddCombobox(    -name         => 'cbDefaultLang'         ,
                             -size         => [130,100]               ,
-                            -pos          => [285,228]               ,
+                            -pos          => [285,258]               ,
                             -font         => $font10                 ,
                             -dropdownlist => 1                       ,
                             -vscroll      => 1                       , );
@@ -1596,19 +1608,13 @@ $winConfig->AddButton(      -name         => 'btnMACOUIDBUpt'        ,
                             -bitmap       => $downloadBmp            ,
                             -tip          => $STR{'downloadDB'}      ,
                             -visible      => 0                       , );
-$winConfig->AddButton(      -name         => 'btnMACOUIDBImport'     ,
-                            -size         => [ 22, 22]               ,
-                            -pos          => [730, 68]               ,
-                            -bitmap       => $import16Bmp            ,
-                            -tip          => $STR{'importOUIDB'}     ,
-                            -visible      => 0                       , );
 # Database tab - GeoIP Database section
 $winConfig->AddLabel(       -name         => 'lblGeoIPDBShadowT'     ,
                             -size         => [250, 22]               ,
                             -pos          => [151,104]               ,
                             -foreground   => [180, 180, 180]         ,
                             -background   => [255, 255, 255]         ,
-                            -text         => $STR{'GeoIPDB'}.':'     ,
+                            -text         => $STR{'GeoIP'}.':'      ,
                             -font         => $fontGBu                ,
                             -visible      => 0                       , );
 $winConfig->AddLabel(       -name         => 'lblGeoIPDBT'           ,
@@ -1616,7 +1622,7 @@ $winConfig->AddLabel(       -name         => 'lblGeoIPDBT'           ,
                             -pos          => [150,103]               ,
                             -addstyle     => 11                      , # Transparent
                             -foreground   => [ 50, 180,  0]          ,
-                            -text         => $STR{'GeoIPDB'}.':'     ,
+                            -text         => $STR{'GeoIP'}.':'      ,
                             -font         => $fontGBu                ,
                             -visible      => 0                       , );
 $winConfig->AddCheckbox(    -name         => 'chGeoIPDBAutoUpt'      ,
@@ -1642,10 +1648,17 @@ $winConfig->AddButton(      -name         => 'btnGeoIPDBUpt'         ,
                             -bitmap       => $downloadBmp            ,
                             -tip          => $STR{'downloadDB'}      ,
                             -visible      => 0                       , );
+$winConfig->AddLabel(       -name         => 'lblGeoIPNotice'        ,
+                            -size         => [630, 22]               ,
+                            -pos          => [150,160]               ,
+                            -background   => [255, 255, 255]         ,
+                            -foreground   => [ 80,  80,  80]         ,
+                            -text         => $STR{'GeoIPNotice'}     ,
+                            -font         => $font10                 , );
 # Database tab - Issuer Identification Number (IIN) Database section
 $winConfig->AddLabel(       -name         => 'lblIINDBShadowT'       ,
                             -size         => [250, 22]               ,
-                            -pos          => [151,169]               ,
+                            -pos          => [151,189]               ,
                             -foreground   => [180, 180, 180]         ,
                             -background   => [255, 255, 255]         ,
                             -text         => $STR{'IINLocalDB'}.':'  ,
@@ -1653,7 +1666,7 @@ $winConfig->AddLabel(       -name         => 'lblIINDBShadowT'       ,
                             -visible      => 0                       , );
 $winConfig->AddLabel(       -name         => 'lblIINDBT'             ,
                             -size         => [250, 22]               ,
-                            -pos          => [150,168]               ,
+                            -pos          => [150,188]               ,
                             -addstyle     => 11                      , # Transparent
                             -foreground   => [ 50, 180,  0]          ,
                             -text         => $STR{'IINLocalDB'}.':'  ,
@@ -1661,24 +1674,24 @@ $winConfig->AddLabel(       -name         => 'lblIINDBT'             ,
                             -visible      => 0                       , );
 $winConfig->AddTextfield(   -name         => 'tfIINDB'               ,
                             -size         => [532, 22]               ,
-                            -pos          => [150,198]               ,
+                            -pos          => [150,218]               ,
                             -visible      => 0                       , );
 $winConfig->AddButton(      -name         => 'btnIINDB'              ,
                             -size         => [ 22, 22]               ,
-                            -pos          => [684,198]               ,
+                            -pos          => [684,218]               ,
                             -bitmap       => $fileOpenBmp            ,
                             -tip          => $STR{'selectDBFile'}    ,
                             -visible      => 0                       , );
 $winConfig->AddButton(      -name         => 'btnIINDBUpt'           ,
                             -size         => [ 22, 22]               ,
-                            -pos          => [707,198]               ,
+                            -pos          => [707,218]               ,
                             -bitmap       => $downloadBmp            ,
                             -tip          => $STR{'downloadDB'}      ,
                             -visible      => 0                       , );
 # Database tab - TLD Database section
 $winConfig->AddLabel(       -name         => 'lblTLDDBShadowT'       ,
                             -size         => [260, 22]               ,
-                            -pos          => [151,234]               ,
+                            -pos          => [151,251]               ,
                             -foreground   => [180, 180, 180]         ,
                             -background   => [255, 255, 255]         ,
                             -text         => $STR{'lblTLDDB'}.':'    ,
@@ -1686,7 +1699,7 @@ $winConfig->AddLabel(       -name         => 'lblTLDDBShadowT'       ,
                             -visible      => 0                       , );
 $winConfig->AddLabel(       -name         => 'lblTLDDBT'             ,
                             -size         => [260, 22]               ,
-                            -pos          => [150,233]               ,
+                            -pos          => [150,250]               ,
                             -addstyle     => 11                      , # Transparent
                             -foreground   => [ 50, 180,  0]          ,
                             -text         => $STR{'lblTLDDB'}.':'    ,
@@ -1694,24 +1707,24 @@ $winConfig->AddLabel(       -name         => 'lblTLDDBT'             ,
                             -visible      => 0                       ,  );
 $winConfig->AddCheckbox(    -name         => 'chTLDDBAutoUpt'        ,
                             -size         => [240, 20]               ,
-                            -pos          => [535,236]               ,
+                            -pos          => [535,253]               ,
                             -background   => [255, 255, 255]         ,
                             -text         => $STR{'AutoUpdateTip'}   ,
                             -font         => $font10                 ,
                             -visible      => 0                       , );
 $winConfig->AddTextfield(   -name         => 'tfTLDDB'               ,
                             -size         => [532, 22]               ,
-                            -pos          => [150,263]               ,
+                            -pos          => [150,280]               ,
                             -visible      => 0                       , );
 $winConfig->AddButton(      -name         => 'btnTLDDB'              ,
                             -size         => [ 22, 22]               ,
-                            -pos          => [685,263]               ,
+                            -pos          => [685,280]               ,
                             -bitmap       => $fileOpenBmp            ,
-                            -tip          => $STR{'btnTLDDBTip'}     ,
+                            -tip          => $STR{'selectDBFile'}    ,
                             -visible      => 0                       , );
 $winConfig->AddButton(      -name         => 'btnTLDDBUpt'           ,
                             -size         => [ 22, 22]               ,
-                            -pos          => [707,263]               ,
+                            -pos          => [707,280]               ,
                             -bitmap       => $downloadBmp            ,
                             -tip          => $STR{'downloadDB'}      ,
                             -visible      => 0                       , );
@@ -1776,7 +1789,7 @@ $winConfig->AddLabel(       -name         => 'lblLFDBShadowT'        ,
                             -pos          => [151,119]               ,
                             -foreground   => [180, 180, 180]         ,
                             -background   => [255, 255, 255]         ,
-                            -text         => $STR{'winLFDB'}.':'     ,
+                            -text         => $STR{'LFDB'}.':'        ,
                             -font         => $fontGBu                ,
                             -visible      => 0                       , );
 $winConfig->AddLabel(       -name         => 'lblLFDBT'              ,
@@ -1784,7 +1797,7 @@ $winConfig->AddLabel(       -name         => 'lblLFDBT'              ,
                             -pos          => [150,118]               ,
                             -addstyle     => 11                      , # Transparent
                             -foreground   => [ 50, 180,  0]          ,
-                            -text         => $STR{'winLFDB'}.':'     ,
+                            -text         => $STR{'LFDB'}.':'        ,
                             -font         => $fontGBu                ,
                             -visible      => 0                       , );
 $winConfig->AddTextfield(   -name         => 'tfLFDB'                ,
@@ -2082,7 +2095,8 @@ if (-T $CONFIG_FILE) {
     sleep(1);
     # Check update for tool and databases ?
     if ($CONFIG{'TOOL_AUTO_UPDATE'} or $CONFIG{'MACOUI_DB_AUTO_UPDATE'} or $CONFIG{'GEOIP_DB_AUTO_UPDATE'}) {
-      &updateAll($VERSION, $USERDIR, \$HOURGLASS, \$ARROW, $CONFIG_FILE, \%CONFIG, \$winConfig, \$winPb, \$win, \%STR);
+      &updateAll($VERSION, $USERDIR, \$HOURGLASS, \$ARROW, \$winConfig, \%CONFIG, $CONFIG_FILE, \$winDTDB,
+                 \$winLFDB, \$winLFObj, \$winPb, \$win, \%STR);
     }
   });
   # Position the window
@@ -2154,7 +2168,7 @@ sub winMain_Terminate
   my $winTop    = $win->AbsTop();
   $CONFIG{'SCREEN_LEFT'} = $winLeft;
   $CONFIG{'SCREEN_TOP'}  = $winTop;
-  &saveConfig($CONFIG_FILE, \%CONFIG);
+  &saveConfig(\%CONFIG, $CONFIG_FILE);
   my $reportDir = $winReport->tfReportDir->Text();
   unlink("$reportDir\\CurrentListFiles.json") if $reportDir and -f "$reportDir\\CurrentListFiles.json";
   -1; # Close program
@@ -2551,7 +2565,7 @@ sub createWinClip
                           -ok          => 1                   ,
                           -default     => 1                   , );
   $winClip->AddButton(    -name        => 'btnClipEdit'       ,
-                          -text        => $STR{'Edit'}        ,
+                          -text        => $STR{'Save'}        ,
                           -size        => [ 80, 30]           ,
                           -pos         => [($winWidth-170)/2+100,$winHeight-73] ,
                           -disabled    => 1                   , );
@@ -4014,7 +4028,7 @@ sub TabFunctions_Click
     # Verify if a valid XL-Whois database is set
     my $xlwhoisExists = 0;
     my $XLWHOISDBFile = $winConfig->tfXLWHOISDB->Text();
-    $xlwhoisExists = 1 if $XLWHOISDBFile and -f $XLWHOISDBFile and &validXLWHOISDB($XLWHOISDBFile);
+    $xlwhoisExists = 1 if $XLWHOISDBFile and -f $XLWHOISDBFile and &validSQLiteDB($XLWHOISDBFile, 'WHOIS_DB');
     $win->chLAOptResISP->Disable()            if !$xlwhoisExists;
     $win->chLAOptResISP->Checked(0)           if !$xlwhoisExists;
     $winReport->chReportOptIncISP->Disable()  if !$xlwhoisExists;
@@ -4030,7 +4044,7 @@ sub TabFunctions_Click
     # Verify if a valid Datetime database is set
     my $dtExists = 0;
     my $DTDBFile = $winConfig->tfDTDB->Text();
-    $dtExists = 1 if $DTDBFile and -f $DTDBFile and &validDTDB($DTDBFile);
+    $dtExists = 1 if $DTDBFile and -f $DTDBFile and &validSQLiteDB($DTDBFile, 'DT');
     $win->chLAOptResWeekday->Disable()            if !$dtExists;
     $winReport->cbOutputDTFormat->Disable()       if !$dtExists;
     $winReport->btnOutputFormatDTDB->Disable()    if !$dtExists;
@@ -4125,7 +4139,7 @@ sub TabFunctions_Click
     # Verify if a valid Datetime database is set
     my $dtExists = 0;
     my $DTDBFile = $winConfig->tfDTDB->Text();
-    $dtExists = 1 if $DTDBFile and -f $DTDBFile and &validDTDB($DTDBFile);
+    $dtExists = 1 if $DTDBFile and -f $DTDBFile and &validSQLiteDB($DTDBFile, 'DT');
     $win->ExtractFunctions->Hide();
     $win->lblSplitType->Show();
     $win->rbSplitBySize->Show();
@@ -4300,7 +4314,7 @@ sub ExtractFunctions_Click
       # Verify if a valid XL-Whois database is set
       my $xlwhoisExists = 0;
       my $XLWHOISDBFile = $winConfig->tfXLWHOISDB->Text();
-      $xlwhoisExists = 1 if $XLWHOISDBFile and -f $XLWHOISDBFile and &validXLWHOISDB($XLWHOISDBFile);
+      $xlwhoisExists = 1 if $XLWHOISDBFile and -f $XLWHOISDBFile and &validSQLiteDB($XLWHOISDBFile, 'WHOIS_DB');
       # Verify if a valid GeoIP database is set
       my $geoipExists = 0;
       my $GeoIPDBFile = $winConfig->tfGeoIPDB->Text();
@@ -4308,15 +4322,15 @@ sub ExtractFunctions_Click
       # Verify if a valid TLD database is set
       my $restldExists = 0;
       my $resTLDDBFile = $winConfig->tfResTLDDB->Text();
-      $restldExists = 1 if $resTLDDBFile and -f $resTLDDBFile and &validResTLDDB($resTLDDBFile);
+      $restldExists = 1 if $resTLDDBFile and -f $resTLDDBFile and &validSQLiteDB($resTLDDBFile, 'DATA');
       # Verify if a valid MACOUI database is set
       my $macouiExists = 0;
       my $MACOUIDBFile = $winConfig->tfMACOUIDB->Text();
-      $macouiExists = 1 if $MACOUIDBFile and -f $MACOUIDBFile and &validMACOUIDB($MACOUIDBFile);
+      $macouiExists = 1 if $MACOUIDBFile and -f $MACOUIDBFile and &validSQLiteDB($MACOUIDBFile, 'MACOUI');
       # Verify if a valid IIN database is set
       my $iinExists = 0;
       my $IINDBFile = $winConfig->tfIINDB->Text();
-      $iinExists = 1 if $IINDBFile and -f $IINDBFile and &validIINDB($IINDBFile);
+      $iinExists = 1 if $IINDBFile and -f $IINDBFile and &validSQLiteDB($IINDBFile, 'IIN');
       # Set Special objects treeview values
       my $parent;
       my $node;
@@ -4327,6 +4341,7 @@ sub ExtractFunctions_Click
       $win->tvSO->InsertItem(-parent => $node, -text => $STR{'SO_ResolveTLD'})          if $restldExists;
       $parent = $win->tvSO->InsertItem(-text => $STR{'SO_IPv6Addr'});
       $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_IPAddr_XLWhoisDB'})  if $xlwhoisExists;
+      $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_GeoIP'})             if $geoipExists;
       $node = $win->tvSO->InsertItem(-parent => $parent, -text => $STR{'SO_NSLookup'});
       $win->tvSO->InsertItem(-parent => $node, -text => $STR{'SO_ResolveTLD'})          if $restldExists;
       $parent = $win->tvSO->InsertItem(-text => $STR{'SO_URLs'});
@@ -4840,18 +4855,18 @@ sub createWinExtraction
   $winExtraction->gridExprDatabase->SetCellFormat(0, 4, 1);
   $winExtraction->gridExprDatabase->SetCellFormat(0, 5, 1);
   # Load the Expression History or create if doesn't exist
-  if ($CONFIG{'EXPR_HISTO_DB'} and -f $CONFIG{'EXPR_HISTO_DB'} and &validExprHistoDB($CONFIG{'EXPR_HISTO_DB'})) {
+  if ($CONFIG{'EXPR_HISTO_DB'} and -f $CONFIG{'EXPR_HISTO_DB'} and &validSQLiteDB($CONFIG{'EXPR_HISTO_DB'}, 'EXPR_HISTO_DB')) {
     &loadExprHistoDB($winConfig->tfExprHistoDB->Text(), \$winExtraction,
                      $winConfig->cbLocalTZ->GetString($CONFIG{'LOCAL_TIMEZONE'}), \$win, \%STR);
-  } elsif ((!$CONFIG{'EXPR_HISTO_DB'} or !-f $CONFIG{'EXPR_HISTO_DB'} or !&validExprHistoDB($CONFIG{'EXPR_HISTO_DB'}))
+  } elsif ((!$CONFIG{'EXPR_HISTO_DB'} or !-f $CONFIG{'EXPR_HISTO_DB'} or !&validSQLiteDB($CONFIG{'EXPR_HISTO_DB'}, 'EXPR_HISTO_DB'))
            and $winExtraction->chEnableExprHistory->Checked()) {
     my $exprHistoDBFile = "$USERDIR\\ExprHisto.db";
     $winConfig->tfExprHistoDB->Text($exprHistoDBFile) if &createExprHistoDB($exprHistoDBFile);
   }
   # Load the Expression database
-  if ($CONFIG{'EXPR_DB'} and -f $CONFIG{'EXPR_DB'} and &validExprDB($CONFIG{'EXPR_DB'})) {
+  if ($CONFIG{'EXPR_DB'} and -f $CONFIG{'EXPR_DB'} and &validSQLiteDB($CONFIG{'EXPR_DB'}, 'EXPR_DB')) {
     &loadExprDB($winConfig->tfExprDB->Text(), \$winExtraction, \$win, \%STR);
-  } elsif (!$CONFIG{'EXPR_DB'} or !-f $CONFIG{'EXPR_DB'} or !&validExprDB($CONFIG{'EXPR_DB'})) {
+  } elsif (!$CONFIG{'EXPR_DB'} or !-f $CONFIG{'EXPR_DB'} or !&validSQLiteDB($CONFIG{'EXPR_DB'}, 'EXPR_DB')) {
     my $exprDBFile = "$USERDIR\\Expr.db";
     $winConfig->tfExprDB->Text($exprDBFile) if &createExprDB($exprDBFile);
   }
@@ -5009,7 +5024,7 @@ sub btnExtractExprAddDB_Click
   my $newLine;
   # Select or create Expression database
   my $exprDBFile = $winConfig->tfExprDB->Text();
-  if (!-f $exprDBFile or !&validExprDB($exprDBFile)) {
+  if (!-f $exprDBFile or !&validSQLiteDB($exprDBFile, 'EXPR_DB')) {
     $exprDBFile = "$USERDIR\\Expr.db";
     $winConfig->tfExprDB->Text($exprDBFile) if &createExprDB($exprDBFile);
   }
@@ -5026,7 +5041,7 @@ sub btnExtractExprAddDB_Click
     my $sth = $dbh->prepare('INSERT INTO EXPR_DB (used, matchcase, regex, invert, expr, comment) VALUES(?,?,?,?,?,?)');
     my $rv  = $sth->execute(0, $case, $regex, $invert, $expr, $comment);
     if ($rv < 0) {
-      Win32::GUI::MessageBox($winExtraction, $STR{'errorMsg'}.$DBI::errstr, $STR{'error'}, 0x40010);
+      Win32::GUI::MessageBox($winExtraction, $STR{'errorMsg'}.$DBI::errstr, $STR{'Error'}, 0x40010);
       return(0);
     } else {
       # Add to Grid
@@ -5057,7 +5072,7 @@ sub btnExtractExprAddDB_Click
         $winExtraction->gridExprDatabase->ExpandLastColumn();
         # Final message
         Win32::GUI::MessageBox($winExtraction, $STR{'addedExprDB'}, $STR{'exprDatabase'}, 0x40040);
-      } else { Win32::GUI::MessageBox($winExtraction, $STR{'errNewLine'}, $STR{'error'}, 0x40010); }
+      } else { Win32::GUI::MessageBox($winExtraction, $STR{'errNewLine'}, $STR{'Error'}, 0x40010); }
     }
   }
   # Return to database expression tab
@@ -5084,12 +5099,12 @@ sub btnExtractExprSaveDB_Click
   $exprDBFile    = encode('utf8', $exprDBFile);
   my $dsn = "DBI:SQLite:dbname=$exprDBFile";
   my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
-            or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+            or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'Error'}, 0x40010);
   # Delete the old expression
   # Database: table = EXPR_DB, Fields = used, matchcase, regex, invert, expr, comment
   my $sth = $dbh->prepare('DELETE from EXPR_DB where expr == ?');
   my $rv  = $sth->execute($oldExpr);
-  if ($rv < 0) { Win32::GUI::MessageBox($winExtraction, $STR{'errDB'}.$DBI::errstr, $STR{'error'}, 0x40010); }
+  if ($rv < 0) { Win32::GUI::MessageBox($winExtraction, $STR{'errDB'}.$DBI::errstr, $STR{'Error'}, 0x40010); }
   else { 
     # Find the entry in grid and delete
     for (my $k = 0; $k < $winExtraction->gridExprDatabase->GetRows(); $k++) {
@@ -5105,7 +5120,7 @@ sub btnExtractExprSaveDB_Click
   $sth = $dbh->prepare('INSERT INTO EXPR_DB (used, matchcase, regex, invert, expr, comment) VALUES(?,?,?,?,?,?)');
   $rv  = $sth->execute(0, $case, $regex, $invert, $newExpr, $comment);
   if ($rv < 0) {
-    Win32::GUI::MessageBox($winExtraction, $STR{'errorMsg'}.$DBI::errstr, $STR{'error'}, 0x40010);
+    Win32::GUI::MessageBox($winExtraction, $STR{'errorMsg'}.$DBI::errstr, $STR{'Error'}, 0x40010);
     return(0);
   } else {
     # Add to Grid
@@ -5139,7 +5154,7 @@ sub btnExtractExprSaveDB_Click
       $winExtraction->gridExprDatabase->ExpandLastColumn();
       # Final message
       Win32::GUI::MessageBox($winExtraction, $STR{'editedExprDB'}, $STR{'exprDatabase'}, 0x40040);
-    } else { Win32::GUI::MessageBox($winExtraction, $STR{'errNewLine'}, $STR{'error'}, 0x40010); }
+    } else { Win32::GUI::MessageBox($winExtraction, $STR{'errNewLine'}, $STR{'Error'}, 0x40010); }
   }
 
 }  #--- End btnExtractExprSaveDB_Click
@@ -5385,7 +5400,7 @@ sub testExpression
   if ($statusRegex) {
     $winExprTool->btnExprTestOk->Disable();
     $winExprTool->btnExprTestNotReady->Enable();
-    Win32::GUI::MessageBox($winExprTool, "$STR{'errorMsg'}\n\n$STR{'errRegex'}: $msg", $STR{'error'}, 0x40040) if $confirm;
+    Win32::GUI::MessageBox($winExprTool, "$STR{'errorMsg'}\n\n$STR{'errRegex'}: $msg", $STR{'Error'}, 0x40040) if $confirm;
   # Expression is ok
   } elsif ($expr) {
     my $i = 0;
@@ -5449,10 +5464,10 @@ sub chEnableExprHistory_Click
   # Save the choice
   if ($winExtraction->chEnableExprHistory->Checked()) {
     $CONFIG{'EXPR_HISTORY'} = 1;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   } else {
     $CONFIG{'EXPR_HISTORY'} = 0;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   }
 
 }  #--- End chEnableExprHistory_Click
@@ -5463,7 +5478,7 @@ sub tfExprHistoryMax_Change
 {
   # Save the choice
   $CONFIG{'EXPR_HISTORY_MAX'} = $winExtraction->tfExprHistoryMax->Text();
-  &saveConfig($CONFIG_FILE, \%CONFIG);
+  &saveConfig(\%CONFIG, $CONFIG_FILE);
 
 }  #--- End tfExprHistoryMax_Change
 
@@ -5560,7 +5575,7 @@ sub exprHistoAddToDB_Click
     $exprDBFile = encode('utf8', $exprDBFile);
     my $dsn     = "DBI:SQLite:dbname=$exprDBFile";
     my $dbh     = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
-                  or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+                  or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'Error'}, 0x40010);
     # Database: table = EXPR_DB, Fields = used, matchcase, regex, invert, expr, comment
     my $sth = $dbh->prepare('INSERT INTO EXPR_DB (used, matchcase, regex, invert, expr, comment) VALUES(?,?,?,?,?,?)');
     # Loop each entry and add
@@ -5581,7 +5596,7 @@ sub exprHistoAddToDB_Click
         if (!$exprExists) {
           my $rv = $sth->execute(0, $case, $regex, $invert, $expr, $comment);
           if ($rv < 0) {
-            Win32::GUI::MessageBox($winExtraction, $STR{'errorMsg'}.$DBI::errstr, $STR{'error'}, 0x40010);
+            Win32::GUI::MessageBox($winExtraction, $STR{'errorMsg'}.$DBI::errstr, $STR{'Error'}, 0x40010);
             return(0);
           } else {
             # Add to Grid
@@ -5612,7 +5627,7 @@ sub exprHistoAddToDB_Click
               $winExtraction->gridExprDatabase->ExpandLastColumn();
               # Final message
               Win32::GUI::MessageBox($winExtraction, $STR{'addedExprDB'}, $STR{'exprDatabase'}, 0x40040);
-            } else { Win32::GUI::MessageBox($winExtraction, $STR{'errNewLine'}, $STR{'error'}, 0x40010); }
+            } else { Win32::GUI::MessageBox($winExtraction, $STR{'errNewLine'}, $STR{'Error'}, 0x40010); }
           }
         }
       }
@@ -5676,7 +5691,7 @@ sub exprHistoDelete_Click
     $exprHistoDBFile = encode('utf8', $exprHistoDBFile);
     my $dsn          = "DBI:SQLite:dbname=$exprHistoDBFile";
     my $dbh          = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
-                       or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+                       or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'Error'}, 0x40010);
     # Loop each entry and delete
     my $j = 0;
     foreach my $exprEntry2del (@Entries2del) {
@@ -5688,7 +5703,7 @@ sub exprHistoDelete_Click
           # Database: table = EXPR_HISTO_DB, Fields = date, matchcase, regex, invert, expr, comment
           my $sth = $dbh->prepare('DELETE from EXPR_HISTO_DB where expr == ?');
           my $rv = $sth->execute($exprEntry);
-          if ($rv < 0) { Win32::GUI::MessageBox($winExtraction, $STR{'errDB'}.$DBI::errstr, $STR{'error'}, 0x40010); }
+          if ($rv < 0) { Win32::GUI::MessageBox($winExtraction, $STR{'errDB'}.$DBI::errstr, $STR{'Error'}, 0x40010); }
           else { 
             # Find the entry in grid and delete
             for (my $k = $i; $k < $winExtraction->gridExprHistory->GetRows(); $k++) {
@@ -5736,7 +5751,7 @@ sub addExprHisto
     # Database: table = EXPR_HISTO_DB, Fields = date, matchcase, regex, invert, expr, comment
     my $sth = $dbh->prepare('INSERT OR REPLACE INTO EXPR_HISTO_DB (date, matchcase, regex, invert, expr, comment) VALUES(?,?,?,?,?,?)');
     my $rv  = $sth->execute($unixtime, $case, $regex, $invert, $expr, $comment);
-    if ($rv < 0) { Win32::GUI::MessageBox($win, $STR{'errorMsg'}.$DBI::errstr, $STR{'error'}, 0x40010); }
+    if ($rv < 0) { Win32::GUI::MessageBox($win, $STR{'errorMsg'}.$DBI::errstr, $STR{'Error'}, 0x40010); }
     else {
       my $modified = 0;
       # Check if expression exists in Expression history grid, if so modify it
@@ -5789,7 +5804,7 @@ sub addExprHisto
           # Database: table = EXPR_HISTO_DB, Fields = date, matchcase, regex, invert, expr, comment
           $sth = $dbh->prepare('DELETE from EXPR_HISTO_DB where expr == ?');
           $rv  = $sth->execute($oldestExpr);
-          if ($rv < 0) { Win32::GUI::MessageBox($winExtraction, $STR{'errDB'}.$DBI::errstr, $STR{'error'}, 0x40010); }
+          if ($rv < 0) { Win32::GUI::MessageBox($winExtraction, $STR{'errDB'}.$DBI::errstr, $STR{'Error'}, 0x40010); }
           else { 
             # Find the entry in grid and delete
             for (my $k = 0; $k < $winExtraction->gridExprHistory->GetRows(); $k++) {
@@ -5809,7 +5824,7 @@ sub addExprHisto
       $winExtraction->gridExprHistory->Refresh();
     }
     $dbh->disconnect();
-  } else { Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010); }
+  } else { Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'Error'}, 0x40010); }
 
 }  #--- End addExprHisto
   
@@ -5836,14 +5851,14 @@ sub gridExprDatabase_Click
       $exprDBFile = encode('utf8', $exprDBFile);
       my $dsn     = "DBI:SQLite:dbname=$exprDBFile";
       my $dbh     = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
-                    or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+                    or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'Error'}, 0x40010);
       # Database: table = EXPR_DB, Fields = used, matchcase, regex, invert, expr, comment
       my $sth = $dbh->prepare('UPDATE EXPR_DB SET matchcase = ?, regex = ?, invert = ? WHERE ? == expr');
       my $rv  = $sth->execute($winExtraction->gridExprDatabase->GetCellCheck($row, 1),
                               $winExtraction->gridExprDatabase->GetCellCheck($row, 2),
                               $winExtraction->gridExprDatabase->GetCellCheck($row, 3),
                               $expr);
-      Win32::GUI::MessageBox($win, $STR{'errUpdatingDB'}.$DBI::errstr, $STR{'error'}, 0x40010) if $rv < 0;
+      Win32::GUI::MessageBox($win, $STR{'errUpdatingDB'}.$DBI::errstr, $STR{'Error'}, 0x40010) if $rv < 0;
       $dbh->disconnect();
     }
   }
@@ -5917,11 +5932,11 @@ sub gridExprDatabase_EndEdit
       $exprDBFile = encode('utf8', $exprDBFile);
       my $dsn     = "DBI:SQLite:dbname=$exprDBFile";
       my $dbh     = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
-                    or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+                    or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'Error'}, 0x40010);
       # Database: table = EXPR_DB, Fields = used, matchcase, regex, invert, expr, comment
       my $sth = $dbh->prepare('UPDATE EXPR_DB SET comment = ? WHERE ? == expr');
       my $rv  = $sth->execute($winExtraction->gridExprDatabase->GetCellText($row, 4), $expr);
-      Win32::GUI::MessageBox($win, $STR{'errUpdatingDB'}.$DBI::errstr, $STR{'error'}, 0x40010) if $rv < 0;
+      Win32::GUI::MessageBox($win, $STR{'errUpdatingDB'}.$DBI::errstr, $STR{'Error'}, 0x40010) if $rv < 0;
       $dbh->disconnect();
     }
   }
@@ -5994,7 +6009,7 @@ sub exprDBDelete_Click
     $exprDBFile = encode('utf8', $exprDBFile);
     my $dsn     = "DBI:SQLite:dbname=$exprDBFile";
     my $dbh     = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
-                  or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+                  or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'Error'}, 0x40010);
     # Loop each entry and delete
     my $j = 0;
     foreach my $exprEntry2del (@Entries2del) {
@@ -6005,7 +6020,7 @@ sub exprDBDelete_Click
           # Database: table = EXPR_DB, Fields = used, matchcase, regex, invert, expr, comment
           my $sth = $dbh->prepare('DELETE from EXPR_DB where expr == ?');
           my $rv = $sth->execute($exprEntry);
-          if ($rv < 0) { Win32::GUI::MessageBox($winExtraction, $STR{'errDB'}.$DBI::errstr, $STR{'error'}, 0x40010); }
+          if ($rv < 0) { Win32::GUI::MessageBox($winExtraction, $STR{'errDB'}.$DBI::errstr, $STR{'Error'}, 0x40010); }
           else { 
             # Find the entry in grid and delete
             for (my $k = $i; $k < $winExtraction->gridExprDatabase->GetRows(); $k++) {
@@ -6601,7 +6616,7 @@ sub btnExtractOpenRes_Click
         my $procID  = time;
         my $command = 'XL-Parser-process ' . "Extract-Results $procID \"$PROGDIR\" \"$resFile\" \"$USERDIR\"";
         Win32::Process::Create(my $processObj, $PROGDIR .'\XL-Parser-process.exe', $command, 0, NORMAL_PRIORITY_CLASS, $PROGDIR);
-      } else { Win32::GUI::MessageBox($win, $STR{'invalidFile'}, $STR{'error'}, 0x40010); }
+      } else { Win32::GUI::MessageBox($win, $STR{'invalidFile'}, $STR{'Error'}, 0x40010); }
     }
   }
   return(1);
@@ -7134,7 +7149,7 @@ sub createWinLFDB
   $winLFDB = Win32::GUI::Window->new( -name        => 'winLFDB'              ,
                                       -background  => [255, 255, 255]        ,
                                       -parent      => $win                   ,
-                                      -text        => $STR{'winLFDB'}        ,
+                                      -text        => $STR{'LFDB'}           ,
                                       -pos         => [$winPosX, $winPosY]   ,
                                       -size        => [$winWidth, 300]       ,
                                       -minsize     => [$winWidth, 200]       ,
@@ -7182,18 +7197,19 @@ sub createWinLFDB
   $winLFDB->gridLF->SetCellText(0, 3, $STR{'Regex'}   );
   if ($load) {
     # Load the Log format Database and add data to Log format controls
-    if ($CONFIG{'LF_DB_FILE'} and -f $CONFIG{'LF_DB_FILE'} and &validLFDB($CONFIG{'LF_DB_FILE'})) {
+    if ($CONFIG{'LF_DB_FILE'} and -f $CONFIG{'LF_DB_FILE'} and &validSQLiteDB($CONFIG{'LF_DB_FILE'}, 'LF')) {
       &loadLFDB($winConfig->tfLFDB->Text(), \$winLFDB, \$win, \%STR);
       &cbInputLFFormatAddITems();
       $win->cbLF->SetCurSel(0);
     # If don't exist, ask to download it
     } else {
-      my $answer = Win32::GUI::MessageBox($win, "$STR{'LFDBNotExist'} ?", $STR{'winLFDB'}, 0x1024);
+      my $answer = Win32::GUI::MessageBox($win, "$STR{'LFDB'} (LF.db) $STR{'NotExistDownload'}?", $STR{'LFDB'}, 0x1024);
       if ($answer == 6) { # Answer: Yes (6), No (7)
-        my $errMsg = &downloadLFDB("$USERDIR\\LF.db", $USERDIR, \$HOURGLASS, \$ARROW, $CONFIG_FILE, \%CONFIG,
-                                   \$winConfig, \$winLFDB, \$winLFObj, \$winPb, \$win, \%STR);
-        if ($errMsg) { Win32::GUI::MessageBox($win, "$errMsg"          , $STR{'error'}      , 0x40010); }
-        else         { Win32::GUI::MessageBox($win, $STR{'updatedLFDB'}, "XL-Parser $VERSION", 0x40040); }
+        my ($status, $return) = &downloadDB(\$win, 'LF', $STR{'LFDB'}, "$USERDIR\\LF.db", 'le-tools.com', \$HOURGLASS,
+                                            \$ARROW, \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj,
+                                            \$winPb, \$win, \%STR);
+        if ($status) { Win32::GUI::MessageBox($win, "$STR{'LFDB'} $STR{'HasBeenUpdated'}", "XL-Parser $VERSION", 0x40040); }
+        else         { Win32::GUI::MessageBox($win, $return, $STR{'Error'}, 0x40010); }
       } else { # Create an empty LF database
         my $LFDBFile = "$USERDIR\\LF.db";
         $winConfig->tfLFDB->Text($LFDBFile) if &createLFDB($LFDBFile);
@@ -7546,7 +7562,7 @@ sub btnLFObjFromInput_Click
       while (<$fh>) { $firstLine = $_ if $_ !~ /^#/; }
       close($fh);
       $winLFObj->tfLFObjSample->Text($firstLine);
-    } else { Win32::GUI::MessageBox($winLFObj, "$STR{'errorOpening'} $oneFile...", $STR{'error'}, 0x40010); }
+    } else { Win32::GUI::MessageBox($winLFObj, "$STR{'errorOpening'} $oneFile...", $STR{'Error'}, 0x40010); }
   }
   
 }  #--- End btnLFObjFromInput_Click
@@ -7580,7 +7596,7 @@ sub btnLFPatternFromIISLog_Click
                 $DTName =~ s/ /%20/g;
                 $patternStr .= $fieldPattern{$field}.'('.$DTName.') ';
               # If date not found
-              } else { Win32::GUI::MessageBox($winLFObj, "$STR{'Date'} $STR{'formatNotFound'}...", $STR{'error'}, 0x40010); return(1); }
+              } else { Win32::GUI::MessageBox($winLFObj, "$STR{'Date'} $STR{'formatNotFound'}...", $STR{'Error'}, 0x40010); return(1); }
             } else { $patternStr .= $fieldPattern{$field} . ' '; }
           } else { $patternStr .= 'other' . ' '; }
         }
@@ -7589,9 +7605,9 @@ sub btnLFPatternFromIISLog_Click
           chop($patternStr);
           while ($patternStr =~ s/ other$//) { }
           $winLFObj->tfLFObjPattern->Text($patternStr);
-        } else { Win32::GUI::MessageBox($winLFObj, "$STR{'formatNotFound'}...", $STR{'error'}, 0x40010); }
-      } else { Win32::GUI::MessageBox($winLFObj, "$STR{'formatNotFound'}...", $STR{'error'}, 0x40010); }
-    } else { Win32::GUI::MessageBox($winLFObj, "$STR{'errorOpening'} $oneFile...", $STR{'error'}, 0x40010); }
+        } else { Win32::GUI::MessageBox($winLFObj, "$STR{'formatNotFound'}...", $STR{'Error'}, 0x40010); }
+      } else { Win32::GUI::MessageBox($winLFObj, "$STR{'formatNotFound'}...", $STR{'Error'}, 0x40010); }
+    } else { Win32::GUI::MessageBox($winLFObj, "$STR{'errorOpening'} $oneFile...", $STR{'Error'}, 0x40010); }
   }
   
 }  #--- End btnLFPatternFromIISLog_Click
@@ -7616,7 +7632,7 @@ sub btnLFObjPatternInsert_Click
       $winLFObj->tfLFObjPattern->Append($LFObjPatternStr[$LFObjPattern]."($DTFormatSample)");
     }
   # May contain spaces
-  } elsif ($winLFObj->chLFObjHasSpaces->Checked()) {
+  } elsif ($winLFObj->chLFObjHasSpaces->Checked() and ($LFObjPattern == 8 or $LFObjPattern == 9)) {
     $winLFObj->tfLFObjPattern->Append('"'.$LFObjPatternStr[$LFObjPattern].'-s"');
   } else { $winLFObj->tfLFObjPattern->Append($LFObjPatternStr[$LFObjPattern].''); }
   &isLFObjReady(0);
@@ -7744,7 +7760,7 @@ sub createWinDTDB
   $winDTDB->gridDT->SetCellFormat(0, 5, 1);
   if ($load) {
     # Load the Datetime Database and add data to datetime controls
-    if ($CONFIG{'DT_DB_FILE'} and -f $CONFIG{'DT_DB_FILE'} and &validDTDB($CONFIG{'DT_DB_FILE'})) {
+    if ($CONFIG{'DT_DB_FILE'} and -f $CONFIG{'DT_DB_FILE'} and &validSQLiteDB($CONFIG{'DT_DB_FILE'}, 'DT')) {
       &loadDTDB;
       &cbInputDTFormatAddITems();
       $winLFObj->cbLFObjDT->SetCurSel(0);
@@ -7755,12 +7771,13 @@ sub createWinDTDB
       } else { $winReport->cbOutputDTFormat->SetCurSel(0); }
     # If don't exist, ask to download it
     } else {
-      my $answer = Win32::GUI::MessageBox($win, "$STR{'DTDBNotExist'} ?", $STR{'winDTDB'}, 0x1024);
+      my $answer = Win32::GUI::MessageBox($win, "$STR{'winDTDB'} (DT.db) $STR{'NotExistDownload'}?", $STR{'winDTDB'}, 0x1024);
       if ($answer == 6) { # Answer: Yes (6), No (7)
-        my $errMsg = &downloadDTDB("$USERDIR\\DT.db", $USERDIR, \$HOURGLASS, \$ARROW, $CONFIG_FILE, \%CONFIG,
-                                   \$winConfig, \$winLFObj, \$winDTDB, \$winReport, \$winPb, \$win, \%STR);
-        if ($errMsg) { Win32::GUI::MessageBox($win, "$errMsg"          , $STR{'error'}      , 0x40010); }
-        else         { Win32::GUI::MessageBox($win, $STR{'updatedDTDB'}, "XL-Parser $VERSION", 0x40040); }
+        my ($status, $return) = &downloadDB(\$winConfig, 'DT', $STR{'winDTDB'}, "$USERDIR\\DT.db", 'le-tools.com', \$HOURGLASS,
+                                            \$ARROW, \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj,
+                                            \$winPb, \$win, \%STR);
+        if ($status) { Win32::GUI::MessageBox($winConfig, "$STR{'winDTDB'} $STR{'HasBeenUpdated'}", "XL-Parser $VERSION", 0x40040); }
+        else         { Win32::GUI::MessageBox($winConfig, $return, $STR{'Error'}, 0x40010); }
       }
     }
   }
@@ -7781,7 +7798,7 @@ sub btnLFObjDTGuess_Click
       foreach (@listMatches) { $msg .= "\r\n- $_"; }
       Win32::GUI::MessageBox($winLFObj, $msg, $STR{'warning'}, 0x40030);
     }
-  } else { Win32::GUI::MessageBox($winLFObj, $STR{'formatNotFound'}.'...', $STR{'error'}, 0x40010); } # If not found
+  } else { Win32::GUI::MessageBox($winLFObj, $STR{'formatNotFound'}.'...', $STR{'Error'}, 0x40010); } # If not found
   return(1);
 
 }  #--- End btnLFObjDTGuess_Click
@@ -7790,7 +7807,7 @@ sub btnLFObjDTGuess_Click
 sub tfLFObjPattern_Change
 #--------------------------#
 {
-  my $pattern = $winLFObj->tfLFObjPattern->Text();
+  my $pattern   = $winLFObj->tfLFObjPattern->Text();
   if ($pattern and $winLFObj->chLFObjRegexAuto->Checked()) {
     my $regex = &patternLFRE($pattern);
     $winLFObj->tfLFObjRegex->Text($regex);
@@ -7812,7 +7829,7 @@ sub patternLFRE
   # Convert each pattern to the appropriate regex
   foreach my $pattern (@patterns) {
     if (length($pattern) > 1) {
-      $regex .= ' ' if $regex;
+      $regex .= ' ' if $regex and $regex !~ / $/;
       $regex .= "\\".$1 if $pattern =~ /^([\"\[])/; # " or [
       # For datetime pattern, gather regex from database
       if ($pattern =~ /datetime\(([^\]\)]+)\)/) {
@@ -7821,17 +7838,17 @@ sub patternLFRE
         my ($sample, $pattern, $DTregex, $timezone) = &findInputDTFormat($format) if $format ne $STR{'selectDTFormat'};
         $regex .= '(' . $DTregex . ')' if $DTregex;
       }
-      elsif ($pattern =~ /remoteIP/) { $regex .= '((?:\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|[a-fA-F0-9]\:|\:[a-fA-F0-9]))'; } # RemoteIP (IPv4 or IPv6)
+      elsif ($pattern =~ /remoteIP/) { $regex .= '((?:\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|[a-fA-F0-9\:]+))'; } # RemoteIP (IPv4 or IPv6)
       elsif ($pattern =~ /http_status/ or
-             $pattern =~ /size/    ) { $regex .= '(\d+)';    } # Field is a number
-      elsif ($pattern =~ /-s\"$/   ) { $regex .= '([^\"]+)'; } # Field may contains spaces
-      elsif ($pattern =~ /other/   ) {                         # Pattern we don't need to extract
+             $pattern =~ /size/    ) { $regex .= '([\d\-]+)'; } # Field is a number
+      elsif ($pattern =~ /-s\"$/   ) { $regex .= '([^\"]*)';  } # Field may contains spaces
+      elsif ($pattern =~ /other/   ) {                          # Pattern we don't need to extract
         if ($winLFObj->chLFObjHasSpaces->Checked()) { $regex .= '[^\ \"]+'; }
         else                                        { $regex .= '[^\ ]+';   }
       } else {                                                 # Any other pattern
         if ($winLFObj->chLFObjHasSpaces->Checked()) { $regex .= '([^\ \"]+)'; }
         else                                        { $regex .= '([^\ ]+)';   }
-       }
+      }
       $regex .= "\\".$1 if $pattern =~ /([\"\]])$/;  # " or ]
     } else { $regex .= $pattern; }
   }
@@ -7851,7 +7868,7 @@ sub tfLFObjRegex_Change { &isLFObjReady(0); }
 sub chLFObjRegexAuto_Click
 #--------------------------#
 {
-  my $pattern = $winLFObj->tfLFObjPattern->Text();
+  my $pattern   = $winLFObj->tfLFObjPattern->Text();
   if ($pattern and $winLFObj->chLFObjRegexAuto->Checked()) {
     my $regex = patternLFRE($pattern);
     $winLFObj->tfLFObjRegex->Text($regex);
@@ -7998,7 +8015,7 @@ sub btnLFObjAdd_Click
   my $regex    = $winLFObj->tfLFObjRegex->Text();
   my $LFDBFile = $winConfig->tfLFDB->Text();
   # Select or create Datetime database
-  if (!-f $LFDBFile or !&validLFDB($LFDBFile)) {
+  if (!-f $LFDBFile or !&validSQLiteDB($LFDBFile, 'LF')) {
     $LFDBFile = "$USERDIR\\LF.db";
     $winConfig->tfLFDB->Text($LFDBFile) if &createLFDB($LFDBFile);
   }
@@ -8010,7 +8027,7 @@ sub btnLFObjAdd_Click
     my $sth = $dbh->prepare('INSERT INTO LF (name, sample, pattern, regex) VALUES(?,?,?,?)');
     my $rv = $sth->execute($LFName, $sample, $pattern, $regex);
     if ($rv < 0) {
-      Win32::GUI::MessageBox($winLFDB, $STR{'errorMsg'}.$DBI::errstr, $STR{'error'}, 0x40010);
+      Win32::GUI::MessageBox($winLFDB, $STR{'errorMsg'}.$DBI::errstr, $STR{'Error'}, 0x40010);
       return(0);
     } else {
       # Add to Grid
@@ -8026,8 +8043,8 @@ sub btnLFObjAdd_Click
         $win->cbLF->Add($LFName); # Add to combobox
         # Final message
         &winLFObj_Terminate();
-        Win32::GUI::MessageBox($winLFDB, $STR{'addedLFObj'}, $STR{'winLFDB'}, 0x40040);
-      } else { Win32::GUI::MessageBox($win, $STR{'errNewLine'}, $STR{'error'}, 0x40010); }
+        Win32::GUI::MessageBox($winLFDB, $STR{'addedLFObj'}, $STR{'LFDB'}, 0x40040);
+      } else { Win32::GUI::MessageBox($win, $STR{'errNewLine'}, $STR{'Error'}, 0x40010); }
     }
   }
 
@@ -8051,7 +8068,7 @@ sub btnLFObjEdit_Click
     my $sth = $dbh->prepare('UPDATE LF SET sample = ?, pattern = ?, regex = ? WHERE ? == name');
     my $rv  = $sth->execute($sample, $pattern, $regex, $LFName);
     if ($rv < 0) {
-      Win32::GUI::MessageBox($winDTDB, $STR{'errorMsg'}.$DBI::errstr, $STR{'error'}, 0x40010);
+      Win32::GUI::MessageBox($winDTDB, $STR{'errorMsg'}.$DBI::errstr, $STR{'Error'}, 0x40010);
       return(0);
     } else {
       # Update Grid
@@ -8067,7 +8084,7 @@ sub btnLFObjEdit_Click
           $winLFDB->gridLF->AutoSizeColumns();
           # Final message
           &winLFObj_Terminate();
-          Win32::GUI::MessageBox($winLFDB, $STR{'updatedLFObj'}, $STR{'winLFDB'}, 0x40040);
+          Win32::GUI::MessageBox($winLFDB, $STR{'updatedLFObj'}, $STR{'LFDB'}, 0x40040);
           last;
         } 
       }
@@ -8092,7 +8109,7 @@ sub btnLFDel_Click
   if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
     my $sth = $dbh->prepare('DELETE FROM LF WHERE name == ?');
     my $rv = $sth->execute($LFName);
-    if ($rv < 0) { Win32::GUI::MessageBox($winLFDB, $STR{'errorMsg'}.$DBI::errstr, $STR{'error'}, 0x40010); }
+    if ($rv < 0) { Win32::GUI::MessageBox($winLFDB, $STR{'errorMsg'}.$DBI::errstr, $STR{'Error'}, 0x40010); }
     else { 
       # Find the entry in grid and delete
       for (my $i = 1; $i < $winLFDB->gridLF->GetRows(); $i++) {
@@ -8104,7 +8121,7 @@ sub btnLFDel_Click
           $winLFDB->gridLF->SortCells(0, 1, sub { my ($e1, $e2) = @_; return (lc($e1) cmp lc($e2)); });
           $winLFDB->gridLF->AutoSizeColumns();
           $win->cbLF->DeleteString($win->cbLF->FindStringExact($LFName)); # If entry is in combobox, delete it
-          Win32::GUI::MessageBox($winLFDB, $STR{'deletedLFObj'}, $STR{'winLFDB'}, 0x40040);
+          Win32::GUI::MessageBox($winLFDB, $STR{'deletedLFObj'}, $STR{'LFDB'}, 0x40040);
           last;
         }
       }
@@ -8169,7 +8186,7 @@ sub btnLFGuess_Click
       foreach (@listMatches) { $msg .= "\r\n- $_"; }
       Win32::GUI::MessageBox($win, $msg, $STR{'warning'}, 0x40030);
     }
-  } else { Win32::GUI::MessageBox($win, $STR{'formatNotFound'}.'...', $STR{'error'}, 0x40010); } # If not found
+  } else { Win32::GUI::MessageBox($win, $STR{'formatNotFound'}.'...', $STR{'Error'}, 0x40010); } # If not found
   &isProcessReady(0);
 
 }  #--- End btnLFGuess_Click
@@ -8208,7 +8225,7 @@ sub btnLAFileOrder_Click
       $winFO->Center($win);
       $winFO->Show();
       $win->Disable();
-    } else { Win32::GUI::MessageBox($win, $STR{'noFile'}, $STR{'error'}, 0x40010); } # No files
+    } else { Win32::GUI::MessageBox($win, $STR{'noFile'}, $STR{'Error'}, 0x40010); } # No files
   }
   return(1);
 
@@ -8811,7 +8828,7 @@ sub btnLAQueryColsOk_Click
     $winLAQueryCols->Hide();
     $win->Enable();
     $win->BringWindowToTop();
-  } else { Win32::GUI::MessageBox($win, $STR{'noColumnSel'}, $STR{'error'}, 0x40010); }
+  } else { Win32::GUI::MessageBox($win, $STR{'noColumnSel'}, $STR{'Error'}, 0x40010); }
   return(1);
   
 }  #--- End btnLAQueryColsOk_Click
@@ -9226,7 +9243,7 @@ sub savedQueriesDelete_Click
           # Database: table = QUERIES, Fields = name, cat, query, used, time
           my $sth = $dbh->prepare('DELETE FROM QUERIES where cat = ? and name = ?');
           my $rv  = $sth->execute($Entries2del{$row}{cat}, $Entries2del{$row}{name});
-          if ($rv < 0) { Win32::GUI::MessageBox($winLASavedQueries, $STR{'errDB'}.$DBI::errstr, $STR{'error'}, 0x40010); }
+          if ($rv < 0) { Win32::GUI::MessageBox($winLASavedQueries, $STR{'errDB'}.$DBI::errstr, $STR{'Error'}, 0x40010); }
           else {
             # Find the entry in grid and delete
             my $currCat  = $winLASavedQueries->gridQueries->GetCellText($row, 0);
@@ -9239,7 +9256,7 @@ sub savedQueriesDelete_Click
         $winPb->pbWinPb->StepIt();
       }
       $dbh->disconnect();
-    } else { Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010); }
+    } else { Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'Error'}, 0x40010); }
     $winLASavedQueries->ChangeCursor($ARROW);
     &winPb_Terminate;
     $winLASavedQueries->gridQueries->AutoSize();
@@ -9282,34 +9299,15 @@ sub btnLAQueryReset_Click
 sub btnLAQueryValid_Click
 #--------------------------#
 {
-  # A SQL Query must be set or selected
-  if    (!$win->tfLAQuery->Text()) { $win->tfLAQueryValidHidden->Text(''); }
-  # Test query
-  if (my $query = $win->tfLAQuery->Text() and my $dbFile = $win->tfInput->Text()) {
-    my $err;
-    if ($query =~ /SELECT/ and $query =~ /FROM/) {
-      $dbFile = encode('utf8', $dbFile);
-      my $dsn = "DBI:SQLite:dbname=$dbFile";
-      if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, PrintError => 0, PrintWarn  => 1 })) {
-        eval    { my $sth = $dbh->prepare($query); };
-        if ($@) { # Error in query
-          $win->tfLAQueryValidHidden->Text(2);
-          $err = $STR{'errQuery'} . ': ' . (split(/ at /, $@))[0];
-        } else {
-          $win->tfLAQueryValidHidden->Text(1);
-          Win32::GUI::MessageBox($win, "$STR{'validQuery'}!", "$STR{'Test'} $STR{'Query'}", 0x40040);
-          } # Query OK
-      } else {
-        $win->tfLAQueryValidHidden->Text(2);
-        Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}, "$STR{'Test'} $STR{'Query'}", 0x40010);
-        } # Cannot connect to DB
-    } else {
-      $win->tfLAQueryValidHidden->Text(2);
-      Win32::GUI::MessageBox($win, $STR{'errQuery'}, "$STR{'Test'} $STR{'Query'}", 0x40010);
-    } # Query incomplete
+  my ($return, $msg) = &validLABDQuery(\$win, \%STR);
+  if ($return) {
+    $win->tfLAQueryValidHidden->Text(1);
+    Win32::GUI::MessageBox($win, "$STR{'validQuery'}!", "$STR{'Test'} $STR{'Query'}", 0x40040);
+  } else {
+    $win->tfLAQueryValidHidden->Text(2);
+    Win32::GUI::MessageBox($win, $msg, "$STR{'Test'} $STR{'Query'}", 0x40010);
   }
   $win->tfLAQuery->Show();
-  $win->btnLAQueryValid->Disable();
   &isProcessReady(0);
   return(1);
   
@@ -9495,7 +9493,7 @@ sub btnSQLQueryOk_Click
   if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
     # Test if name already exists
     if (!$editRow and $dbh->selectrow_array('SELECT name FROM QUERIES WHERE name == ?', undef, $queryName)) {
-      Win32::GUI::MessageBox($win, $STR{'errEntryExists'}.'!', $STR{'error'}, 0x40010);
+      Win32::GUI::MessageBox($win, $STR{'errEntryExists'}.'!', $STR{'Error'}, 0x40010);
     } else {
       # If editing, delete the entry
       if ($editRow) {
@@ -9505,7 +9503,7 @@ sub btnSQLQueryOk_Click
         my $sth = $dbh->prepare('DELETE FROM QUERIES where cat = ? and name = ?');
         my $rv  = $sth->execute($oldQueryCat, $oldQueryName);
         if ($rv < 0) {
-          Win32::GUI::MessageBox($winSaveQuery, $STR{'errDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+          Win32::GUI::MessageBox($winSaveQuery, $STR{'errDB'}.$DBI::errstr, $STR{'Error'}, 0x40010);
           &winSaveQuery_Terminate();
           $winLASavedQueries->Center($win);
           $winLASavedQueries->Show();
@@ -9542,7 +9540,7 @@ sub btnSQLQueryOk_Click
           $winLASavedQueries->Center($win);
           $winLASavedQueries->Show();
         }
-      } else { Win32::GUI::MessageBox($win, $STR{'errNewLine'}, $STR{'error'}, 0x40010); }
+      } else { Win32::GUI::MessageBox($win, $STR{'errNewLine'}, $STR{'Error'}, 0x40010); }
     }
   }
   
@@ -9812,7 +9810,7 @@ sub btnLASearchOpenResults_Click
             }
           # Results doesn't match the selected database
           } else {
-            Win32::GUI::MessageBox($win, $STR{'errDBFilePath'}, $STR{'error'}, 0x40010);
+            Win32::GUI::MessageBox($win, $STR{'errDBFilePath'}, $STR{'Error'}, 0x40010);
             return(1);
           }
         }
@@ -9823,7 +9821,7 @@ sub btnLASearchOpenResults_Click
         my $command = 'XL-Parser-process ' . "LADB-SAResults $procID \"$PROGDIR\" \"$resFile\" \"$USERDIR\"";
         Win32::Process::Create(my $processObj, $PROGDIR .'\XL-Parser-process.exe', $command, 0, NORMAL_PRIORITY_CLASS, $PROGDIR);
         $win->gridLASearchSAInd->BringWindowToTop();
-      } else { Win32::GUI::MessageBox($win, $STR{'invalidFile'}, $STR{'error'}, 0x40010); }
+      } else { Win32::GUI::MessageBox($win, $STR{'invalidFile'}, $STR{'Error'}, 0x40010); }
     }
   }
   return(1);
@@ -9898,7 +9896,7 @@ sub cbOutputDTFormat_Change
 {
   # Remember
   $CONFIG{'DEFAULT_OUTPUT_DT_FORMAT'} = $winReport->cbOutputDTFormat->GetString($winReport->cbOutputDTFormat->GetCurSel());
-  &saveConfig($CONFIG_FILE, \%CONFIG);
+  &saveConfig(\%CONFIG, $CONFIG_FILE);
   
 }  #--- End cbOutputDTFormat_Change
 
@@ -10419,7 +10417,7 @@ sub createWinFieldFilter
                                     -font         => $font10                 ,
                                     -dropdownlist => 1                       ,
                                     -tabstop      => 1                       , );
-  $winFieldFilter->cbFieldFilterFF->Add($STR{'LFclientIP'}, $STR{'isp'}, $STR{'GeoIPDB'}, $STR{'DTDB'}, $STR{'Weekday'},
+  $winFieldFilter->cbFieldFilterFF->Add($STR{'LFclientIP'}, $STR{'isp'}, $STR{'GeoIP'}, $STR{'DTDB'}, $STR{'Weekday'},
                                         $STR{'LFHTTPmethod'}, $STR{'LFHTTPreq'}, $STR{'LFHTTPparam'}, $STR{'LFHTTPprot'},
                                         $STR{'LFHTTPstatus'}, $STR{'LFsize'}, $STR{'LFReferer'}, $STR{'LFUA'}, $STR{'LFUA-t'},
                                         $STR{'LFUA-os'},$STR{'LFUA-b'}, $STR{'LFUA-d'}, $STR{'LFUA-l'});
@@ -10564,7 +10562,7 @@ sub createWinFieldFilter
     if (&createLAFiltersDB($LAFiltersDBFile) and &createLAFilterSetDB($LAFiltersDBFile)) {
       $CONFIG{'LAFILTERS_DB_FILE'} = $LAFiltersDBFile;
       $winConfig->tfLAFiltersDB->Text($LAFiltersDBFile);
-      &saveConfig($CONFIG_FILE, \%CONFIG);
+      &saveConfig(\%CONFIG, $CONFIG_FILE);
       # Create the directory for FilterSet files (json)
       mkdir("$USERDIR\\Filters") if !-d "$USERDIR\\Filters";
     }
@@ -10914,7 +10912,7 @@ sub btnFilterSetOk_Click
       } # Else, Edit mode, nothing to edit in database
     } else { $return = "$STR{'errorWriting'} JSON"; }
     &winFilterSet_Terminate();
-    if ($return) { Win32::GUI::MessageBox($win, $return, $STR{'error'}, 0x40010); }
+    if ($return) { Win32::GUI::MessageBox($win, $return, $STR{'Error'}, 0x40010); }
     else {
       if (!$editRow) { Win32::GUI::MessageBox($win, $STR{'addedFilterSetDB'} , "XL-Parser $VERSION", 0x40040); }
       else           { Win32::GUI::MessageBox($win, $STR{'editedFilterSetDB'}, "XL-Parser $VERSION", 0x40040); }
@@ -11011,11 +11009,11 @@ sub cbFieldFilterFF_Change
   $winFieldFilter->cbFieldFilterFFC->Clear();
   $winFieldFilter->cbFieldFilterFFV->Clear();
   if ($filterField) {
-    if      ($filterField ne $STR{'isp'} and $filterField ne $STR{'GeoIPDB'}) {
+    if      ($filterField ne $STR{'isp'} and $filterField ne $STR{'GeoIP'}) {
       $winFieldFilter->cbFieldFilterFFC->Add($STR{'is'}, $STR{'isNot'});
     }
     if      ($filterField eq $STR{'DTDB'}) { $winFieldFilter->cbFieldFilterFFC->Add(lc($STR{'Before'}), lc($STR{'After'}));
-    } elsif ($filterField eq $STR{'LFclientIP'}   or $filterField eq $STR{'isp'}       or $filterField eq $STR{'GeoIPDB'}     or
+    } elsif ($filterField eq $STR{'LFclientIP'}   or $filterField eq $STR{'isp'}       or $filterField eq $STR{'GeoIP'}       or
              $filterField eq $STR{'LFHTTPmethod'} or $filterField eq $STR{'LFHTTPreq'} or $filterField eq $STR{'LFHTTPparam'} or
              $filterField eq $STR{'LFHTTPprot'}   or $filterField eq $STR{'LFReferer'} or $filterField eq $STR{'LFUA'}        or
              $filterField eq $STR{'LFUA-t'}       or $filterField eq $STR{'LFUA-os'}   or $filterField eq $STR{'LFUA-b'}      or
@@ -11283,7 +11281,7 @@ sub FFDBDelete_Click
     $LAFiltersDBFile = encode('utf8', $LAFiltersDBFile);
     my $dsn          = "DBI:SQLite:dbname=$LAFiltersDBFile";
     my $dbh          = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
-                       or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+                       or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'Error'}, 0x40010);
     # Loop each entry and delete
     my $j = 0;
     foreach my $idEntry2del (@Entries2del) {
@@ -11294,7 +11292,7 @@ sub FFDBDelete_Click
           # Database: table = FILTERS, Fields = id, field, cond, value, matchcase, regex
           my $sth = $dbh->prepare('DELETE from FILTERS where id == ?');
           my $rv = $sth->execute($idEntry);
-          if ($rv < 0) { Win32::GUI::MessageBox($winFieldFilter, $STR{'errDB'}.$DBI::errstr, $STR{'error'}, 0x40010); }
+          if ($rv < 0) { Win32::GUI::MessageBox($winFieldFilter, $STR{'errDB'}.$DBI::errstr, $STR{'Error'}, 0x40010); }
           else { 
             # Find the entry in grid and delete
             for (my $k = $i; $k < $winFieldFilter->gridFFDB->GetRows(); $k++) {
@@ -11375,7 +11373,7 @@ sub btnFieldFilterAddDB_Click
     my $sth = $dbh->prepare('INSERT INTO FILTERS (id, field, cond, matchcase, regex, value) VALUES(?,?,?,?,?,?)');
     my $rv = $sth->execute($id, $field, $condition, $case, $regex, $value);
     if ($rv < 0) {
-      Win32::GUI::MessageBox($winFieldFilter, $STR{'errorMsg'}.$DBI::errstr, $STR{'error'}, 0x40010);
+      Win32::GUI::MessageBox($winFieldFilter, $STR{'errorMsg'}.$DBI::errstr, $STR{'Error'}, 0x40010);
       return(0);
     } else {
       # Add to Grid
@@ -11395,7 +11393,7 @@ sub btnFieldFilterAddDB_Click
         $winFieldFilter->gridFFDB->ExpandLastColumn();
         # Final message
         Win32::GUI::MessageBox($winFieldFilter, $STR{'addedFilterDB'}, $STR{'fieldFilterDB'}, 0x40040);
-      } else { Win32::GUI::MessageBox($winFieldFilter, $STR{'errNewLine'}, $STR{'error'}, 0x40010); }
+      } else { Win32::GUI::MessageBox($winFieldFilter, $STR{'errNewLine'}, $STR{'Error'}, 0x40010); }
     }
   }
   # Return to Filters Database tab
@@ -11449,7 +11447,7 @@ sub btnFieldFilterSaveDB_Click
     my $sth = $dbh->prepare('UPDATE FILTERS SET field = ?, cond = ?, matchcase = ?, regex = ?, value = ? WHERE id == ?');
     my $rv  = $sth->execute($field, $condition, $case, $regex, $value, $id);
     if ($rv < 0) {
-      Win32::GUI::MessageBox($winFieldFilter, $STR{'errorMsg'}.$DBI::errstr, $STR{'error'}, 0x40010);
+      Win32::GUI::MessageBox($winFieldFilter, $STR{'errorMsg'}.$DBI::errstr, $STR{'Error'}, 0x40010);
       return(0);
     } else {
       # Edit in Grid
@@ -11622,7 +11620,7 @@ sub btnFieldFilterOk_Click
       $value     = $winFieldFilter->gridFFDB->GetCellText( $row, 5);
       # Filters that require resolving
       if    ($field eq $STR{'isp'}    ) { $win->chLAOptResISP->Checked(1); }
-      elsif ($field eq $STR{'GeoIPDB'}) { $win->chLAOptResGeoIP->Checked(1); }
+      elsif ($field eq $STR{'GeoIP'}  ) { $win->chLAOptResGeoIP->Checked(1); }
       elsif ($field eq $STR{'LFUA-t'} or $field eq $STR{'LFUA-os'} or $field eq $STR{'LFUA-b'} or
              $field eq $STR{'LFUA-d'} or $field eq $STR{'LFUA-l'}) { $win->chLAOptResUA->Checked(1); }
       elsif ($field eq $STR{'Weekday'}) { $win->chLAOptResWeekday->Checked(1); }
@@ -11788,7 +11786,7 @@ sub btnSplitTimeFormatGuess_Click
       foreach (@listMatches) { $msg .= "\r\n- $_"; }
       Win32::GUI::MessageBox($win, $msg, $STR{'warning'}, 0x40030);
     }
-  } else { Win32::GUI::MessageBox($win, $STR{'formatNotFound'}.'...', $STR{'error'}, 0x40010); } # If not found
+  } else { Win32::GUI::MessageBox($win, $STR{'formatNotFound'}.'...', $STR{'Error'}, 0x40010); } # If not found
   &isProcessReady(0);
 
 }  #--- End btnSplitTimeFormatGuess_Click
@@ -12423,7 +12421,7 @@ sub btnDTObjPatternHelp_Click
 #--------------------------#
 {
   # Open Default browser to a help page on Strftime
-  $win->ShellExecute('open', 'http://strftime.net/','','',1) or Win32::GUI::MessageBox($win, Win32::FormatMessage(Win32::GetLastError()), $STR{'error'}, 0x40010);
+  $win->ShellExecute('open', 'http://strftime.net/','','',1) or Win32::GUI::MessageBox($win, Win32::FormatMessage(Win32::GetLastError()), $STR{'Error'}, 0x40010);
   
 }  #--- End btnDTObjPatternHelp_Click
 
@@ -12564,7 +12562,7 @@ sub btnDTObjAdd_Click
     $timezone = $winDTObj->cbDTObjTZName->GetString($winDTObj->cbDTObjTZName->GetCurSel());
   } else { $timezone = 'NULL'; }
   # Select or create Datetime database
-  if (!-f $DTDBFile or !&validDTDB($DTDBFile)) {
+  if (!-f $DTDBFile or !&validSQLiteDB($DTDBFile, 'DT')) {
     $DTDBFile = "$USERDIR\\DT.db";
     $winConfig->tfDTDB->Text($DTDBFile) if &createDTDB($DTDBFile);
   }
@@ -12576,7 +12574,7 @@ sub btnDTObjAdd_Click
     my $sth = $dbh->prepare("insert into DT (sample,pattern,regex,timezone,use_as,comment) values(?,?,?,?,?,?)");
     my $rv = $sth->execute($sample, $pattern, $regex, $timezone, $useAs, $comment);
     if ($rv < 0) {
-      Win32::GUI::MessageBox($winDTDB, $STR{'errorMsg'}.$DBI::errstr, $STR{'error'}, 0x40010);
+      Win32::GUI::MessageBox($winDTDB, $STR{'errorMsg'}.$DBI::errstr, $STR{'Error'}, 0x40010);
       return(0);
     } else {
       # Add to Grid
@@ -12597,7 +12595,7 @@ sub btnDTObjAdd_Click
         # Final message
         &winDTObj_Terminate();
         Win32::GUI::MessageBox($winDTDB, $STR{'addedDTObj'}, $STR{'winDTDB'}, 0x40040);
-      } else { Win32::GUI::MessageBox($win, $STR{'errNewLine'}, $STR{'error'}, 0x40010); }
+      } else { Win32::GUI::MessageBox($win, $STR{'errNewLine'}, $STR{'Error'}, 0x40010); }
     }
   }
 
@@ -12633,7 +12631,7 @@ sub btnDTObjEdit_Click
     my $sth = $dbh->prepare("UPDATE DT SET pattern = ?, regex = ?, timezone = ?, use_as = ?, comment = ? WHERE ? == sample");
     my $rv  = $sth->execute($pattern, $regex, $timezone, $useAs, $comment, $sample);
     if ($rv < 0) {
-      Win32::GUI::MessageBox($winDTDB, $STR{'errorMsg'}.$DBI::errstr, $STR{'error'}, 0x40010);
+      Win32::GUI::MessageBox($winDTDB, $STR{'errorMsg'}.$DBI::errstr, $STR{'Error'}, 0x40010);
       return(0);
     } else {
       # Update Grid
@@ -12695,7 +12693,7 @@ sub btnDTDel_Click
   if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })) {
     my $sth = $dbh->prepare("DELETE from DT where sample == ?");
     my $rv = $sth->execute($sample);
-    if ($rv < 0) { Win32::GUI::MessageBox($winDTDB, $STR{'errorMsg'}.$DBI::errstr, $STR{'error'}, 0x40010); }
+    if ($rv < 0) { Win32::GUI::MessageBox($winDTDB, $STR{'errorMsg'}.$DBI::errstr, $STR{'Error'}, 0x40010); }
     else { 
       # Find the entry in grid and delete
       for (my $i = 1; $i < $winDTDB->gridDT->GetRows(); $i++) {
@@ -12755,12 +12753,12 @@ sub loadDTDB
     # Connect to DB
     my $dsn = "DBI:SQLite:dbname=$DTDBFile";
     my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
-              or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+              or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'Error'}, 0x40010);
     # Check if DT table exists
     my $sth;
     eval { $sth = $dbh->table_info(undef, undef, '%', 'TABLE'); };
     if ($@) {
-      Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+      Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'Error'}, 0x40010);
       return(0);
     }
     my @info = $sth->fetchrow_array;
@@ -12787,7 +12785,7 @@ sub loadDTDB
       $winDTDB->gridDT->ExpandColumnsToFit();
       $dbh->disconnect();
       return(1);
-    } else { Win32::GUI::MessageBox($win, $STR{'errorDB'}, $STR{'error'}, 0x40010); return(0); }
+    } else { Win32::GUI::MessageBox($win, $STR{'errorDB'}, $STR{'Error'}, 0x40010); return(0); }
   } else { return(0); }
 
 }  #--- End loadDTDB
@@ -12963,15 +12961,15 @@ sub tfReportDir_Change
   # Remember
   if ($saveDir and -d $saveDir) {
     $CONFIG{'REPORT_DIR'} = $saveDir;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
     $winReport->btnReportOk->Enable();
   } else { # Invalid dir or no dir
     delete($CONFIG{'REPORT_DIR'});
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
     $winReport->btnReportOk->Disable();
     if ($saveDir) {
       $winReport->tfReportDir->Text('');
-      Win32::GUI::MessageBox($winReport, $STR{'invalidDir'}, $STR{'error'}, 0x40010) if $START == 1;
+      Win32::GUI::MessageBox($winReport, $STR{'invalidDir'}, $STR{'Error'}, 0x40010) if $START == 1;
     }
   }
 
@@ -13024,10 +13022,10 @@ sub chReplaceReport_Click
   # Save the choice
   if ($winReport->chReplaceReport->Checked()) {
     $CONFIG{'REPORT_REPLACE_REPORT'} = 1;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   } else {
     $CONFIG{'REPORT_REPLACE_REPORT'} = 0;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   }
 
 }  #--- End chReplaceReport_Click
@@ -13039,10 +13037,10 @@ sub chOpenReport_Click
   # Save the choice
   if ($winReport->chOpenReport->Checked()) {
     $CONFIG{'REPORT_AUTO_OPEN'} = 1;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   } else {
     $CONFIG{'REPORT_AUTO_OPEN'} = 0;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   }
 
 }  #--- End chOpenReport_Click
@@ -13193,7 +13191,7 @@ sub changePath_Click
             $winLACurrDBFiles->gridCurrDBListFiles->SetCellColor($row, 8, [0,0,0]);
             # Change path in database
             my $rv = $sth->execute($newPath, $currPath);
-            Win32::GUI::MessageBox($winLACurrDBFiles, $STR{'errUpdatingDB'}.$DBI::errstr, $STR{'error'}, 0x40010) if $rv < 0;
+            Win32::GUI::MessageBox($winLACurrDBFiles, $STR{'errUpdatingDB'}.$DBI::errstr, $STR{'Error'}, 0x40010) if $rv < 0;
             $winLACurrDBFiles->gridCurrDBListFiles->SetSelectedCellRange($row, 0, $row, 8, 0, 0)
             if $winLACurrDBFiles->gridCurrDBListFiles->IsCellSelected($row, 0);
           }
@@ -13206,7 +13204,7 @@ sub changePath_Click
       $winLACurrDBFiles->gridCurrDBListFiles->ExpandColumnsToFit();
       $winLACurrDBFiles->gridCurrDBListFiles->Refresh();
     } else {
-      Win32::GUI::MessageBox($winLACurrDBFiles, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+      Win32::GUI::MessageBox($winLACurrDBFiles, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'Error'}, 0x40010);
       }
   }
   return(1);
@@ -13284,7 +13282,7 @@ sub createCW
                         -size        => [320, 22]             ,
                         -pos         => [140, 30]             ,
                         -font        => $font10               ,
-                        -text        => $STR{'LocateThe'}.$STR{'GeoIPDB2'}.'...',
+                        -text        => "$STR{'LocateThe'} $STR{'GeoIPDB'}...",
                         -background  => [255, 255, 255]       ,
                         -foreground  => [  0, 102, 204]       ,
                         -visible     => 0                     , );
@@ -13304,7 +13302,7 @@ sub createCW
                         -size        => [320, 22]             ,
                         -pos         => [140, 50]             ,
                         -font        => $font10               ,
-                        -text        => $STR{'LocateThe'}.$STR{'IINLocalDB2'}.'...',
+                        -text        => "$STR{'LocateThe'} $STR{'IINDB'}...",
                         -background  => [255, 255, 255]       ,
                         -foreground  => [  0, 102, 204]       ,
                         -visible     => 0                     , );
@@ -13324,7 +13322,7 @@ sub createCW
                         -size        => [320, 22]             ,
                         -pos         => [140, 70]             ,
                         -font        => $font10               ,
-                        -text        => $STR{'LocateThe'}.$STR{'lblTLDDB'}.'...',
+                        -text        => "$STR{'LocateThe'} $STR{'lblTLDDB'}...",
                         -background  => [255, 255, 255]       ,
                         -foreground  => [  0, 102, 204]       ,
                         -visible     => 0                     , );
@@ -13385,7 +13383,7 @@ sub createCW
                         -size        => [320, 22]             ,
                         -pos         => [140,130]             ,
                         -font        => $font10               ,
-                        -text        => $STR{'downloadLFDB'}.'...',
+                        -text        => $STR{'downloadDB'}.'...',
                         -background  => [255, 255, 255]       ,
                         -foreground  => [  0, 102, 204]       ,
                         -visible     => 0                     , );
@@ -13446,7 +13444,7 @@ sub createCW
                         -size        => [320, 22]             ,
                         -pos         => [140,190]             ,
                         -font        => $font10               ,
-                        -text        => $STR{'LocateThe'}.$STR{'XLWhoisDB2'}.'...',
+                        -text        => "$STR{'LocateThe'} $STR{'XLWhoisDB2'}...",
                         -background  => [255, 255, 255]       ,
                         -foreground  => [  0, 102, 204]       ,
                         -visible     => 0                     , );
@@ -13466,7 +13464,7 @@ sub createCW
                         -size        => [320, 22]             ,
                         -pos         => [140,210]             ,
                         -font        => $font10               ,
-                        -text        => $STR{'LocateThe'}.$STR{'ResTLDDB'}.'...',
+                        -text        => "$STR{'LocateThe'} $STR{'ResTLDDB'}...",
                         -background  => [255, 255, 255]       ,
                         -foreground  => [  0, 102, 204]       ,
                         -visible     => 0                     , );
@@ -13486,7 +13484,7 @@ sub createCW
                         -size        => [320, 22]             ,
                         -pos         => [140,230]             ,
                         -font        => $font10               ,
-                        -text        => $STR{'LocateThe'}.$STR{'winDTDB'}.'...',
+                        -text        => "$STR{'LocateThe'} $STR{'winDTDB'}...",
                         -background  => [255, 255, 255]       ,
                         -foreground  => [  0, 102, 204]       ,
                         -visible     => 0                     , );
@@ -13507,7 +13505,7 @@ sub createCW
                         -size        => [320, 22]             ,
                         -pos         => [140,250]             ,
                         -font        => $font10               ,
-                        -text        => $STR{'LocateThe'}.$STR{'OUIDB2'}.'...',
+                        -text        => "$STR{'LocateThe'} $STR{'MACOUIDB'}...",
                         -background  => [255, 255, 255]       ,
                         -foreground  => [  0, 102, 204]       ,
                         -visible     => 0                     , );
@@ -13569,7 +13567,7 @@ sub firstStart
     $winPb->pbWinPb->SetPos(0);
     $winPb->Hide();
     $$refWinCW->Hide();
-    Win32::GUI::MessageBox($win, "$STR{'errorMsg'}: $errMsg", $STR{'error'}, 0x40010);
+    Win32::GUI::MessageBox($win, "$STR{'errorMsg'}: $errMsg", $STR{'Error'}, 0x40010);
   };
   # Yes (6), No (7)
   my $answer = Win32::GUI::MessageBox($win, $STR{'firstStart'}, $STR{'winConfig'}, 0x1024);
@@ -13609,67 +13607,75 @@ sub firstStart
       $CONFIG{'LOCAL_TIMEZONE'} = $index;
       $winConfig->cbDefaultLang->SetCurSel($winConfig->cbDefaultLang->FindStringExact('en-US')); # Default language to en-US
       $CONFIG{'DEFAULT_LANG'} = 'en-US';
-      &saveConfig($CONFIG_FILE, \%CONFIG);
+      &saveConfig(\%CONFIG, $CONFIG_FILE);
       $$refWinCW->lblSetGenOptDone->Show();
       # Databases
-      my $return = 0;
+      my ($status, $return);
       my $defaultPath;
       # GeoIP Database
       $$refWinCW->lblDLGeoIPDB->Show();
-      $defaultPath = "$ENV{'APPDATA'}\\XL-Toolkit\\XL-Tools\\GeoLiteCity.dat";
+      $defaultPath = &findXLTKfile('GeoIPDB');
       if (-f $defaultPath and &validGeoIPDB($defaultPath)) { # Database exists in XL-Tools user dir, check if update available
         $winConfig->tfGeoIPDB->Text($defaultPath);
-        $$refWinCW->lblDLGeoIPDB->Text($STR{'Updating'}.' '.$STR{'GeoIPDB2'});
-        &updateGeoIPDB(0, $VERSION, $dir, \$HOURGLASS, \$ARROW, $CONFIG_FILE, \%CONFIG, \$winConfig, \$winPb, \$win, \%STR);
+        $$refWinCW->lblDLGeoIPDB->Text($STR{'Updating'}.' '.$STR{'GeoIPDB'});
+        &updateDB(0, 'GeoIP', $STR{'GeoIPDB'}, $winConfig->tfGeoIPDB->Text(), 'Maxmind', 'GeoLite2-City.mmdb', $dir, \$HOURGLASS, \$ARROW,
+                  \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj, \$winPb, \$win, \%STR);
         $$refWinCW->lblDLGeoIPDBDone->Show();
       } else {
-        $$refWinCW->lblDLGeoIPDB->Text($STR{'Downloading'}.' '.$STR{'GeoIPDB2'});
-        $return = &downloadGeoIPDB("$dir\\GeoLiteCity.dat", $dir, \$HOURGLASS, \$ARROW, $CONFIG_FILE, \%CONFIG,
-                                   \$winConfig, \$winPb, \$win, \%STR);
-        if ($return) { # Error
+        $$refWinCW->lblDLGeoIPDB->Text($STR{'Downloading'}.' '.$STR{'GeoIPDB'});
+        ($status, $return) = &downloadDB($refWinCW, 'GeoIP', $STR{'GeoIPDB'}, "$dir\\GeoLite2-City.mmdb", 'Maxmind', \$HOURGLASS,
+                                         \$ARROW, \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj,
+                                         \$winPb, \$win, \%STR);
+        if ($status) { $$refWinCW->lblDLGeoIPDBDone->Show(); } # Success
+        else { # Error
           $$refWinCW->lblDLGeoIPDBError->Show();
-          Win32::GUI::MessageBox($win, $return, $STR{'error'}, 0x40010);
-        } else { $$refWinCW->lblDLGeoIPDBDone->Show(); }
+          Win32::GUI::MessageBox($$refWinCW, $return, $STR{'Error'}, 0x40010);
+        }
       }
       $winConfig->chGeoIPDBAutoUpt->Checked(1); # Set auto update for GeoIP Database
       $CONFIG{'GEOIP_DB_AUTO_UPDATE'} = 1;
-      &saveConfig($CONFIG_FILE, \%CONFIG);
+      &saveConfig(\%CONFIG, $CONFIG_FILE);
       # IINDB Database
       $$refWinCW->lblDLIINDB->Show();
       $defaultPath = "$ENV{'APPDATA'}\\XL-Toolkit\\XL-Tools\\IIN.db";
-      if (-f $defaultPath and &validIINDB($defaultPath)) { # Database exists in XL-Tools user dir
+      if (-f $defaultPath and &validSQLiteDB($defaultPath, 'IIN')) { # Database exists in XL-Tools user dir
         $winConfig->tfIINDB->Text($defaultPath);
         $$refWinCW->lblDLIINDBDone->Show();
       } else {
-        $$refWinCW->lblDLIINDB->Text($STR{'Downloading'}.' '.$STR{'IINLocalDB2'});
-        $return = &downloadIINDB("$dir\\IIN.db", $dir, \$HOURGLASS, \$ARROW, $CONFIG_FILE, \%CONFIG, \$winConfig,
-                                 \$winPb, \$win, \%STR);
-        if ($return) { # Error
+        $$refWinCW->lblDLIINDB->Text($STR{'Downloading'}.' '.$STR{'IINDB'});
+        ($status, $return) = &downloadDB($refWinCW, 'IIN', $STR{'IINDB'}, "$dir\\IIN.db", 'le-tools.com', \$HOURGLASS,
+                                         \$ARROW, \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj,
+                                         \$winPb, \$win, \%STR);
+        if ($status) { $$refWinCW->lblDLIINDBDone->Show(); } # Success
+        else { # Error
           $$refWinCW->lblDLIINDBError->Show();
-          Win32::GUI::MessageBox($win, $return, $STR{'error'}, 0x40010);
-        } else { $$refWinCW->lblDLIINDBDone->Show(); }
+          Win32::GUI::MessageBox($$refWinCW, $return, $STR{'Error'}, 0x40010);
+        }
       }
-      &saveConfig($CONFIG_FILE, \%CONFIG);
+      &saveConfig(\%CONFIG, $CONFIG_FILE);
       # TLD Database
       $$refWinCW->lblDLTLDDB->Show();
       $defaultPath = "$ENV{'APPDATA'}\\XL-Toolkit\\XL-Whois\\effective_tld_names.dat";
       if (-f $defaultPath and &validTLDDB($defaultPath)) { # Database exists in XL-Whois user dir, check if update available
         $winConfig->tfTLDDB->Text($defaultPath);
         $$refWinCW->lblDLTLDDB->Text($STR{'Updating'}.' '.$STR{'lblTLDDB'});
-        &updateTLDDB(0, $VERSION, $defaultPath, \$HOURGLASS, \$ARROW, $CONFIG_FILE, \%CONFIG, \$winConfig, \$winPb, \$win, \%STR);
+        &updateDB(0, 'TLD', $STR{'lblTLDDB'}, $winConfig->tfTLDDB->Text(), 'publicsuffix.org', 'effective_tld_names.dat', $dir,
+                  \$HOURGLASS, \$ARROW, \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj, \$winPb, \$win, \%STR);
         $$refWinCW->lblDLTLDDBDone->Show();
       } else {
         $$refWinCW->lblDLTLDDB->Text($STR{'Downloading'}.' '.$STR{'lblTLDDB'});
-        $return = &downloadTLDDB(0, $VERSION, "$dir\\effective_tld_names.dat", \$HOURGLASS, \$ARROW, $CONFIG_FILE,
-                                 \%CONFIG, \$winConfig, \$winPb, \$win, \%STR);
-        if ($return) { # Error
+        ($status, $return) = &downloadDB($refWinCW, 'TLD', $STR{'lblTLDDB'}, "$dir\\effective_tld_names.dat", 'publicsuffix.org',
+                                         \$HOURGLASS, \$ARROW, \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj,
+                                         \$winPb, \$win, \%STR);
+        if ($status) { $$refWinCW->lblDLTLDDBDone->Show(); } # Success
+        else { # Error
           $$refWinCW->lblDLTLDDBError->Show();
-          Win32::GUI::MessageBox($$refWinCW, "$STR{'errorMsg'}: $return", $STR{'error'}, 0x40010);
-        } else { $$refWinCW->lblDLTLDDBDone->Show(); } # Success
+          Win32::GUI::MessageBox($$refWinCW, $return, $STR{'Error'}, 0x40010);
+        }
       }
       $winConfig->chTLDDBAutoUpt->Checked(1); # Set auto update for TLD Database
       $CONFIG{'TLD_DB_AUTO_UPDATE'} = 1;
-      &saveConfig($CONFIG_FILE, \%CONFIG);
+      &saveConfig(\%CONFIG, $CONFIG_FILE);
       # XL-Parser Database
       # Expression History Database
       $$refWinCW->lblExprHistoryDB->Show();
@@ -13683,9 +13689,9 @@ sub firstStart
       # Error
       } else {
         $$refWinCW->lblExprHistoryDBError->Show();
-        Win32::GUI::MessageBox($$refWinCW, $STR{'errorCreatingDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($$refWinCW, $STR{'errorCreatingDB'}.$DBI::errstr, $STR{'Error'}, 0x40010);
       }
-      &saveConfig($CONFIG_FILE, \%CONFIG);
+      &saveConfig(\%CONFIG, $CONFIG_FILE);
       # Expression Database
       $$refWinCW->lblExprDB->Show();
       my $exprDbFile = "$dir\\Expr.db";
@@ -13698,16 +13704,23 @@ sub firstStart
       # Error
       } else {
         $$refWinCW->lblExprDBError->Show();
-        Win32::GUI::MessageBox($$refWinCW, $STR{'errorCreatingDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($$refWinCW, $STR{'errorCreatingDB'}.$DBI::errstr, $STR{'Error'}, 0x40010);
       }
-      &saveConfig($CONFIG_FILE, \%CONFIG);
+      &saveConfig(\%CONFIG, $CONFIG_FILE);
       # Log Format Database
       $$refWinCW->lblLFDB->Show();
-      $return = &downloadLFDB("$dir\\LF.db", $dir, \$HOURGLASS, \$ARROW, $CONFIG_FILE, \%CONFIG, \$winConfig,
-                              \$winLFDB, \$winLFObj, \$winPb, \$win, \%STR);
-      if ($return) { $$refWinCW->lblLFDBError->Show(); }
-      else         { $$refWinCW->lblLFDBDone->Show();  }
-      &saveConfig($CONFIG_FILE, \%CONFIG);
+      ($status, $return) = &downloadDB($refWinCW, 'LF', $STR{'LFDB'}, "$dir\\LF.db", 'le-tools.com', \$HOURGLASS,
+                                       \$ARROW, \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj, \$winPb, \$win, \%STR);
+      if ($status) { $$refWinCW->lblLFDBDone->Show(); } # Success
+      else { # Error
+        $$refWinCW->lblLFDBError->Show();
+        Win32::GUI::MessageBox($$refWinCW, $return, $STR{'Error'}, 0x40010);
+      }
+        
+      #$return = &downloadLFDB("$dir\\LF.db", $dir, \$HOURGLASS, \$ARROW, $CONFIG_FILE, \%CONFIG, \$winConfig,
+      #                        \$winLFDB, \$winLFObj, \$winPb, \$win, \%STR);
+
+      &saveConfig(\%CONFIG, $CONFIG_FILE);
       # Filters Database
       $$refWinCW->lblLAFiltersDB->Show();
       my $LAFiltersDBFile = "$dir\\LA_Filters.db";
@@ -13719,7 +13732,7 @@ sub firstStart
       # Error
       } else {
         $$refWinCW->lblLAFiltersDBError->Show();
-        Win32::GUI::MessageBox($$refWinCW, $STR{'errorCreatingDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($$refWinCW, $STR{'errorCreatingDB'}.$DBI::errstr, $STR{'Error'}, 0x40010);
       }
       # Saved queries Database
       $$refWinCW->lblSavedQueriesDB->Show();
@@ -13731,7 +13744,7 @@ sub firstStart
       # Error
       } else {
         $$refWinCW->lblSavedQueriesDBError->Show();
-        Win32::GUI::MessageBox($$refWinCW, $STR{'errorCreatingDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($$refWinCW, $STR{'errorCreatingDB'}.$DBI::errstr, $STR{'Error'}, 0x40010);
       }
       # XL-Toolkit Databases
       # ISP (XL-Whois) database
@@ -13744,7 +13757,7 @@ sub firstStart
         $answer = Win32::GUI::MessageBox($$refWinCW, $STR{'XLWhoisExists'}.'?', $STR{'winConfig'}, 0x1024);
         # Answer is yes, select the XL-Whois database
         if ($answer == 6) {
-          $XLWHOISDBFile = Win32::GUI::GetOpenFileName( -title         => $STR{'LocateThe'}.$STR{'XLWhoisDB2'}.':',
+          $XLWHOISDBFile = Win32::GUI::GetOpenFileName( -title         => "$STR{'LocateThe'} $STR{'XLWhoisDB2'}:",
                                                         -defaultfilter => 0          ,
                                                         -filemustexist => 1          ,
                                                         -file          => 'Whois.db' ,
@@ -13756,27 +13769,28 @@ sub firstStart
         $CONFIG{'XLWHOIS_DB_FILE'} = $XLWHOISDBFile;
         $$refWinCW->lblLocXLWhoisDBDone->Show();
       } else { $$refWinCW->lblLocXLWhoisDBError->Show(); }
-      &saveConfig($CONFIG_FILE, \%CONFIG);
+      &saveConfig(\%CONFIG, $CONFIG_FILE);
       # Resolve TLD Database
       $$refWinCW->lblResTLDDB->Show();
       $defaultPath = "$ENV{'APPDATA'}\\XL-Toolkit\\XL-Tools\\Customs\\Resolve TLD.db";
-      if (-f $defaultPath and &validResTLDDB($defaultPath)) { # Database exists in XL-Tools user dir
+      if (-f $defaultPath and &validSQLiteDB($defaultPath, 'DATA')) { # Database exists in XL-Tools user dir
         $winConfig->tfResTLDDB->Text($defaultPath);
         $$refWinCW->lblResTLDDBDone->Show();
       } else {
         $$refWinCW->lblDLTLDDB->Text($STR{'Downloading'}.' '.$STR{'ResTLDDB'});
-        $return = &downloadResTLDDB("$dir\\Resolve TLD.db", $dir, \$HOURGLASS, \$ARROW, $CONFIG_FILE, \%CONFIG,
-                                    \$winConfig, \$winPb, \$win, \%STR);
-        if ($return) { 
+        ($status, $return) = &downloadDB($refWinCW, 'ResTLD', $STR{'ResTLDDB'}, "$dir\\Resolve TLD.db", 'le-tools.com', \$HOURGLASS,
+                                         \$ARROW, \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj, \$winPb, \$win, \%STR);
+        if ($status) { $$refWinCW->lblResTLDDBDone->Show(); } # Success
+        else { # Error
           $$refWinCW->lblResTLDDBError->Show();
-          Win32::GUI::MessageBox($win, $return, $STR{'error'}, 0x40010);
-        } else { $$refWinCW->lblResTLDDBDone->Show(); }
+          Win32::GUI::MessageBox($$refWinCW, $return, $STR{'Error'}, 0x40010);
+        }
       }
-      &saveConfig($CONFIG_FILE, \%CONFIG);
+      &saveConfig(\%CONFIG, $CONFIG_FILE);
       # DTDB Database
       $$refWinCW->lblDLDTDB->Show();
       $defaultPath = "$ENV{'APPDATA'}\\XL-Toolkit\\XL-Tools\\DT.db";
-      if (-f $defaultPath and &validDTDB($defaultPath)) { # Valid DTDB in XL-Tools user dir
+      if (-f $defaultPath and &validSQLiteDB($defaultPath, 'DT')) { # Valid DTDB in XL-Tools user dir
         $winConfig->tfDTDB->Text($defaultPath);
         &loadDTDB;
         &cbInputDTFormatAddITems();
@@ -13789,34 +13803,37 @@ sub firstStart
         $$refWinCW->lblDLDTDBDone->Show();
       } else { # No DTDB, download it
         $$refWinCW->lblDLTLDDB->Text($STR{'Downloading'}.' '.$STR{'winDTDB'});
-        $return = &downloadDTDB("$dir\\DT.db", $dir, \$HOURGLASS, \$ARROW, $CONFIG_FILE, \%CONFIG, \$winConfig,
-                                \$winLFObj, \$winDTDB, \$winReport, \$winPb, \$win, \%STR);
-        if ($return) { 
+        ($status, $return) = &downloadDB($refWinCW, 'DT', $STR{'winDTDB'}, "$dir\\DT.db", 'le-tools.com', \$HOURGLASS, \$ARROW,
+                                         \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj, \$winPb, \$win, \%STR);
+        if ($status) { $$refWinCW->lblDLDTDBDone->Show(); } # Success
+        else { # Error
           $$refWinCW->lblDLDTDBError->Show();
-          Win32::GUI::MessageBox($win, $return, $STR{'error'}, 0x40010);
-        } else { $$refWinCW->lblDLDTDBDone->Show(); }
+          Win32::GUI::MessageBox($$refWinCW, $return, $STR{'Error'}, 0x40010);
+        }
       }
-      &saveConfig($CONFIG_FILE, \%CONFIG);
+      &saveConfig(\%CONFIG, $CONFIG_FILE);
       # MACOUI Database
       $$refWinCW->lblDLMACOUIDB->Show();
       $defaultPath = "$ENV{'APPDATA'}\\XL-Toolkit\\XL-Tools\\oui.db";
-      if (-f $defaultPath and &validMACOUIDB($defaultPath)) { # Database exists in XL-Tools user dir, check if update available
+      if (-f $defaultPath and &validSQLiteDB($defaultPath, 'MACOUI')) { # Database exists in XL-Tools user dir, check if update available
         $winConfig->tfMACOUIDB->Text($defaultPath);
-        $$refWinCW->lblDLMACOUIDB->Text($STR{'Updating'}.' '.$STR{'OUIDB2'});
-        &updateMACOUIDB(0, $VERSION, $dir, \$HOURGLASS, \$ARROW, $CONFIG_FILE, \%CONFIG, \$winConfig, \$winPb, \$win, \%STR);
+        $$refWinCW->lblDLMACOUIDB->Text($STR{'Updating'}.' '.$STR{'MACOUIDB'});
+        &updateDB(0, 'MACOUI', $STR{'MACOUIDB'}, $winConfig->tfMACOUIDB->Text(), 'ieee.org', 'oui.db', $dir, \$HOURGLASS, \$ARROW,
+                  \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj, \$winPb, \$win, \%STR);
         $$refWinCW->lblDLMACOUIDBDone->Show();
       } else {
-        $$refWinCW->lblDLMACOUIDB->Text($STR{'Downloading'}.' '.$STR{'OUIDB2'});
-        $return = &downloadMACOUIDB("$dir\\oui.db", $dir, \$HOURGLASS, \$ARROW, $CONFIG_FILE, \%CONFIG, \$winConfig,
-                                    \$winPb, \$win, \%STR);
-        if ($return) { # $return contains error msg if any
+        $$refWinCW->lblDLMACOUIDB->Text($STR{'Downloading'}.' '.$STR{'MACOUIDB'});
+        ($status, $return) = &downloadDB($refWinCW, 'MACOUI', $STR{'MACOUIDB'}, "$dir\\oui.db", 'ieee.org', \$HOURGLASS, \$ARROW,
+                                         \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj, \$winPb, \$win, \%STR);
+        if ($status) { $$refWinCW->lblDLMACOUIDBDone->Show(); } # Success
+        else { # Error
           $$refWinCW->lblDLMACOUIDBError->Show();
-          Win32::GUI::MessageBox($win, $return, $STR{'error'}, 0x40010);
-        } else { $$refWinCW->lblDLMACOUIDBDone->Show(); }
+          Win32::GUI::MessageBox($$refWinCW, $return, $STR{'Error'}, 0x40010);
+        }
       }
       $winConfig->chMACOUIDBAutoUpt->Checked(0); # Default is no auto update
       $CONFIG{'MACOUI_DB_AUTO_UPDATE'} = 0;
-      &saveConfig($CONFIG_FILE, \%CONFIG);
+      &saveConfig(\%CONFIG, $CONFIG_FILE);
       # Close Configuration Wizard
       $$refWinCW->Hide();
       $win->ChangeCursor($ARROW);
@@ -13825,6 +13842,24 @@ sub firstStart
   }
 
 }  #--- End firstStart
+
+#--------------------------#
+sub findXLTKfile
+#--------------------------#
+{
+  my $file = shift;
+  my $defPath;
+  if ($file eq 'GeoIPDB') {
+    if      (-e "$ENV{'APPDATA'}\\XL-Toolkit\\XL-Tools\\GeoLite2-City.mmdb" ) { # In XL-Tools dir
+      $defPath = "$ENV{'APPDATA'}\\XL-Toolkit\\XL-Tools\\GeoLite2-City.mmdb";
+    } elsif (-e "$ENV{'APPDATA'}\\XL-Toolkit\\XL-Whois\\GeoLite2-City.mmdb" ) { # In XL-Whois dir
+      $defPath = "$ENV{'APPDATA'}\\XL-Toolkit\\XL-Whois\\GeoLite2-City.mmdb";
+    }
+    return($defPath) if $defPath;
+  }
+  return('');
+
+}  #--- End findXLTKfile
 
 #--------------------------#
 sub btnWinConfig_Click
@@ -13854,6 +13889,8 @@ sub configTab_Click
     $winConfig->lblFuncT->Show();
     $winConfig->chFullScreen->Show();
     $winConfig->chRememberPos->Show();
+    $winConfig->lblGeoIPLang->Show();
+    $winConfig->cbGeoIPLang->Show();
     $winConfig->lblNsLookupTO1->Show();
     $winConfig->tfLookupTO->Show();
     $winConfig->lblNsLookupTO2->Show();
@@ -13868,13 +13905,13 @@ sub configTab_Click
     $winConfig->tfMACOUIDB->Hide();
     $winConfig->btnMACOUIDB->Hide();
     $winConfig->btnMACOUIDBUpt->Hide();
-    $winConfig->btnMACOUIDBImport->Hide();
     $winConfig->lblGeoIPDBShadowT->Hide();
     $winConfig->lblGeoIPDBT->Hide();
     $winConfig->chGeoIPDBAutoUpt->Hide();
     $winConfig->tfGeoIPDB->Hide();
     $winConfig->btnGeoIPDB->Hide();
     $winConfig->btnGeoIPDBUpt->Hide();
+    $winConfig->lblGeoIPNotice->Hide();
     $winConfig->lblIINDBShadowT->Hide();
     $winConfig->lblIINDBT->Hide();
     $winConfig->tfIINDB->Hide();
@@ -13937,13 +13974,13 @@ sub configTab_Click
     $winConfig->tfMACOUIDB->Show();
     $winConfig->btnMACOUIDB->Show();
     $winConfig->btnMACOUIDBUpt->Show();
-    $winConfig->btnMACOUIDBImport->Show();
     $winConfig->lblGeoIPDBShadowT->Show();
     $winConfig->lblGeoIPDBT->Show();
     $winConfig->chGeoIPDBAutoUpt->Show();
     $winConfig->tfGeoIPDB->Show();
     $winConfig->btnGeoIPDB->Show();
     $winConfig->btnGeoIPDBUpt->Show();
+    $winConfig->lblGeoIPNotice->Show();
     $winConfig->lblIINDBShadowT->Show();
     $winConfig->lblIINDBT->Show();
     $winConfig->tfIINDB->Show();
@@ -13966,6 +14003,8 @@ sub configTab_Click
     $winConfig->lblFuncT->Hide();
     $winConfig->chFullScreen->Hide();
     $winConfig->chRememberPos->Hide();
+    $winConfig->lblGeoIPLang->Hide();
+    $winConfig->cbGeoIPLang->Hide();
     $winConfig->lblNsLookupTO1->Hide();
     $winConfig->tfLookupTO->Hide();
     $winConfig->lblNsLookupTO2->Hide();
@@ -14053,6 +14092,8 @@ sub configTab_Click
     $winConfig->lblFuncT->Hide();
     $winConfig->chFullScreen->Hide();
     $winConfig->chRememberPos->Hide();
+    $winConfig->lblGeoIPLang->Hide();
+    $winConfig->cbGeoIPLang->Hide();
     $winConfig->lblNsLookupTO1->Hide();
     $winConfig->tfLookupTO->Hide();
     $winConfig->lblNsLookupTO2->Hide();
@@ -14067,13 +14108,13 @@ sub configTab_Click
     $winConfig->tfMACOUIDB->Hide();
     $winConfig->btnMACOUIDB->Hide();
     $winConfig->btnMACOUIDBUpt->Hide();
-    $winConfig->btnMACOUIDBImport->Hide();
     $winConfig->lblGeoIPDBShadowT->Hide();
     $winConfig->lblGeoIPDBT->Hide();
     $winConfig->chGeoIPDBAutoUpt->Hide();
     $winConfig->tfGeoIPDB->Hide();
     $winConfig->btnGeoIPDB->Hide();
     $winConfig->btnGeoIPDBUpt->Hide();
+    $winConfig->lblGeoIPNotice->Hide();
     $winConfig->lblIINDBShadowT->Hide();
     $winConfig->lblIINDBT->Hide();
     $winConfig->tfIINDB->Hide();
@@ -14129,6 +14170,8 @@ sub configTab_Click
     $winConfig->lblFuncT->Hide();
     $winConfig->chFullScreen->Hide();
     $winConfig->chRememberPos->Hide();
+    $winConfig->lblGeoIPLang->Hide();
+    $winConfig->cbGeoIPLang->Hide();
     $winConfig->lblNsLookupTO1->Hide();
     $winConfig->tfLookupTO->Hide();
     $winConfig->lblNsLookupTO2->Hide();
@@ -14143,13 +14186,13 @@ sub configTab_Click
     $winConfig->tfMACOUIDB->Hide();
     $winConfig->btnMACOUIDB->Hide();
     $winConfig->btnMACOUIDBUpt->Hide();
-    $winConfig->btnMACOUIDBImport->Hide();
     $winConfig->lblGeoIPDBShadowT->Hide();
     $winConfig->lblGeoIPDBT->Hide();
     $winConfig->chGeoIPDBAutoUpt->Hide();
     $winConfig->tfGeoIPDB->Hide();
     $winConfig->btnGeoIPDB->Hide();
     $winConfig->btnGeoIPDBUpt->Hide();
+    $winConfig->lblGeoIPNotice->Hide();
     $winConfig->lblIINDBShadowT->Hide();
     $winConfig->lblIINDBT->Hide();
     $winConfig->tfIINDB->Hide();
@@ -14225,10 +14268,10 @@ sub chAutoUpdate_Click
   # Save the choice
   if ($winConfig->chAutoUpdate->Checked()) {
     $CONFIG{'TOOL_AUTO_UPDATE'} = 1;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   } else {
     $CONFIG{'TOOL_AUTO_UPDATE'} = 0;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   }
 
 }  #--- End chAutoUpdate_Click
@@ -14240,10 +14283,10 @@ sub chFullScreen_Click
   # Save the choice
   if ($winConfig->chFullScreen->Checked()) {
     $CONFIG{'FULL_SCREEN'} = 1;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   } else {
     $CONFIG{'FULL_SCREEN'} = 0;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   }
 
 }  #--- End chFullScreen_Click
@@ -14255,13 +14298,27 @@ sub chRememberPos_Click
   # Save the choice
   if ($winConfig->chRememberPos->Checked()) {
     $CONFIG{'REMEMBER_POS'} = 1;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   } else {
     $CONFIG{'REMEMBER_POS'} = 0;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   }
 
 }  #--- End chRememberPos_Click
+
+#--------------------------#
+sub cbGeoIPLang_Change
+#--------------------------#
+{
+  # Local variables
+  my $lang = $winConfig->cbGeoIPLang->GetString($winConfig->cbGeoIPLang->GetCurSel());
+  # Remember
+  if ($lang) {
+    $CONFIG{'GEOIP_LANG'} = $lang;
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
+  }
+
+}  #--- End cbGeoIPLang_Change
 
 #--------------------------#
 sub tfLookupTO_Change
@@ -14272,7 +14329,7 @@ sub tfLookupTO_Change
   # Remember
   if ($lookupTO) {
     $CONFIG{'NSLOOKUP_TIMEOUT'} = $lookupTO;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   }
 
 }  #--- End tfLookupTO_Change
@@ -14283,7 +14340,7 @@ sub cbLocalTZ_Change
 {
   # Remember
   $CONFIG{'LOCAL_TIMEZONE'} = $winConfig->cbLocalTZ->GetCurSel();
-  &saveConfig($CONFIG_FILE, \%CONFIG);
+  &saveConfig(\%CONFIG, $CONFIG_FILE);
   
 }  #--- End cbLocalTZ_Change
 
@@ -14293,7 +14350,7 @@ sub cbDefaultLang_Change
 {
   # Remember
   $CONFIG{'DEFAULT_LANG'} = $winConfig->cbDefaultLang->GetString($winConfig->cbDefaultLang->GetCurSel());
-  &saveConfig($CONFIG_FILE, \%CONFIG);
+  &saveConfig(\%CONFIG, $CONFIG_FILE);
   
 }  #--- End cbDefaultLang_Change
 
@@ -14304,10 +14361,10 @@ sub chMACOUIDBAutoUpt_Click
   # Save the choice
   if ($winConfig->chMACOUIDBAutoUpt->Checked() == 1) {
     $CONFIG{'MACOUI_DB_AUTO_UPDATE'} = 1;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   } else {
     $CONFIG{'MACOUI_DB_AUTO_UPDATE'} = 0;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   }
 
 }  #--- End chMACOUIDBAutoUpt_Click
@@ -14319,9 +14376,9 @@ sub tfMACOUIDB_Change
   # Local variables
   my $MACOUIDBFile = $winConfig->tfMACOUIDB->Text();
   # Remember
-  if ($MACOUIDBFile and -f $MACOUIDBFile and &validMACOUIDB($MACOUIDBFile)) {
+  if ($MACOUIDBFile and -f $MACOUIDBFile and &validSQLiteDB($MACOUIDBFile, 'MACOUI')) {
     $CONFIG{'MACOUI_DB_FILE'} = $MACOUIDBFile;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
     # Reset options (Special objects)
     if ($win->tvSO->GetCount() > 1) {
       $win->tvSO->DeleteAllItems();
@@ -14330,10 +14387,10 @@ sub tfMACOUIDB_Change
     }
   } else {
     delete($CONFIG{'MACOUI_DB_FILE'});
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
     if ($MACOUIDBFile) {
       $winConfig->tfMACOUIDB->Text('');
-      Win32::GUI::MessageBox($win, $STR{'invalidFile'}, $STR{'error'}, 0x40010) if $START == 1;
+      Win32::GUI::MessageBox($win, $STR{'invalidFile'}, $STR{'Error'}, 0x40010) if $START == 1;
     }
   }
 
@@ -14351,7 +14408,7 @@ sub btnMACOUIDB_Click
     my (@parts) = split(/\\/, $lastDir);
     if (pop(@parts) =~ /\./) { while ($lastDir =~ /[^\\]$/) { chop($lastDir); } }
     $MACOUIDBFile = Win32::GUI::GetOpenFileName(-owner         => $winConfig                ,
-                                                -title         => $STR{'selMACOUIFile'}.':' ,
+                                                -title         => $STR{'selectDBFile'}.':'  ,
                                                 -defaultfilter => 0                         ,
                                                 -filemustexist => 1                         ,
                                                 -directory     => $lastDir                  ,
@@ -14359,7 +14416,7 @@ sub btnMACOUIDB_Click
                                                 -explorer      => 1                         , );
   } else {
     $MACOUIDBFile = Win32::GUI::GetOpenFileName(-owner         => $winConfig                ,
-                                                -title         => $STR{'selMACOUIFile'}.':' ,
+                                                -title         => $STR{'selectDBFile'}.':'  ,
                                                 -defaultfilter => 0                         ,
                                                 -filemustexist => 1                         ,
                                                 -file          => 'OUI.db'                  ,
@@ -14375,7 +14432,7 @@ sub btnMACOUIDB_Click
 sub btnMACOUIDBUpt_Click
 #--------------------------#
 {
-  if ($THR_UPDATE and $THR_UPDATE->is_running()) { Win32::GUI::MessageBox($win, $STR{'processRunning'}, $STR{'error'}, 0x40010); }
+  if ($THR_UPDATE and $THR_UPDATE->is_running()) { Win32::GUI::MessageBox($win, $STR{'processRunning'}, $STR{'Error'}, 0x40010); }
   else {
     $THR_UPDATE = threads->create(sub {
       # Thread 'cancellation' signal handler
@@ -14411,97 +14468,15 @@ sub btnMACOUIDBUpt_Click
         $winPb->lblCount->Text('');
         $winPb->pbWinPb->SetPos(0);
         $winPb->Hide();
-        Win32::GUI::MessageBox($win, "$STR{'errorMsg'}: $errMsg", $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($win, "$STR{'errorMsg'}: $errMsg", $STR{'Error'}, 0x40010);
       };
-      &updateMACOUIDB(1, $VERSION, $USERDIR, \$HOURGLASS, \$ARROW, $CONFIG_FILE, \%CONFIG, \$winConfig,
-										  \$winPb, \$win, \%STR);
+      &updateDB(1, 'MACOUI', $STR{'MACOUIDB'}, $winConfig->tfMACOUIDB->Text(), 'ieee.org', 'oui.db', $USERDIR, \$HOURGLASS, \$ARROW,
+                \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj, \$winPb, \$win, \%STR);
     });
   }
   return(1);
   
 }  #--- End btnMACOUIDBUpt_Click
-
-#--------------------------#
-sub btnMACOUIDBImport_Click
-#--------------------------#
-{
-  if ($THR_UPDATE and $THR_UPDATE->is_running()) { Win32::GUI::MessageBox($win, $STR{'processRunning'}, $STR{'error'}, 0x40010); }
-  else {
-    # Local variables
-    my $lastDir = $winConfig->tfMACOUIDB->Text();
-    my $MACOUIFile;
-    # Show OpenFile dialog window for the oui.txt file
-    if ($lastDir) {
-      my (@parts) = split(/\\/, $lastDir);
-      if (pop(@parts) =~ /\./) { while ($lastDir =~ /[^\\]$/) { chop($lastDir); } }
-      $MACOUIFile = Win32::GUI::GetOpenFileName(-owner         => $winConfig                         ,
-                                                -title         => $STR{'selectFile'}.'oui.txt:'      ,
-                                                -filter        => [$STR{'text'}.' (*.txt)', '*.txt'] ,
-                                                -filemustexist => 1                                  ,
-                                                -directory     => $lastDir                           ,
-                                                -explorer      => 1                                  , );
-    } else {
-      $MACOUIFile = Win32::GUI::GetOpenFileName(-owner         => $winConfig                         ,
-                                                -title         => $STR{'selectFile'}.'oui.txt:'      ,
-                                                -filter        => [$STR{'text'}.' (*.txt)', '*.txt'] ,
-                                                -filemustexist => 1                                  ,
-                                                -explorer      => 1                                  , );
-    }
-    # Selected file
-    if ($MACOUIFile and -T $MACOUIFile) {
-      # Show SaveFileWindow for database
-      my $localMACOUIDB = Win32::GUI::GetSaveFileName(-owner            => $winConfig                       ,
-                                                      -title            => $STR{'selPathDB'}.':'            ,
-                                                      -file             => 'OUI.db'                         ,
-                                                      -filter           => [$STR{'dbFile'}.' (*.db)', '.db'],
-                                                      -overwriteprompt  => 1                                , );
-      if ($localMACOUIDB) {
-        $THR_UPDATE = threads->create(sub {
-          # Thread 'cancellation' signal handler
-          $SIG{'KILL'} = sub {
-            # Delete temp files
-            unlink($localMACOUIDB.'-journal') if -e $localMACOUIDB.'-journal';
-            unlink($localMACOUIDB)            if -e $localMACOUIDB;
-            $winConfig->tfMACOUIDB->Text('');
-            delete($CONFIG{'MACOUI_DB_FILE'});
-            &saveConfig($CONFIG_FILE, \%CONFIG);
-            $win->ChangeCursor($ARROW);
-            # Turn off progress bar
-            $winPb->lblPbCurr->Text('');
-            $winPb->lblCount->Text('');
-            $winPb->pbWinPb->SetPos(0);
-            $winPb->Hide();
-            threads->exit();
-          };
-          # Thread 'die' signal handler
-          $SIG{__DIE__} = sub {
-            # Delete temp files
-            unlink($localMACOUIDB.'-journal') if -e $localMACOUIDB.'-journal';
-            unlink($localMACOUIDB)            if -e $localMACOUIDB;
-            $winConfig->tfMACOUIDB->Text('');
-            delete($CONFIG{'MACOUI_DB_FILE'});
-            &saveConfig($CONFIG_FILE, \%CONFIG);
-            my $errMsg = (split(/ at /,$_[0]))[0];
-            chomp($errMsg);
-            $errMsg =~ s/[\t\r\n]/ /g;
-            $win->ChangeCursor($ARROW);
-            # Turn off progress bar
-            $winPb->lblPbCurr->Text('');
-            $winPb->lblCount->Text('');
-            $winPb->pbWinPb->SetPos(0);
-            $winPb->Hide();
-            Win32::GUI::MessageBox($win, "$STR{'errorMsg'}: $errMsg", $STR{'error'}, 0x40010);
-          };
-          my $return = &importMACOUIDatabase(0, $localMACOUIDB, $MACOUIFile); # $return contains error msg if any
-        if ($return) { Win32::GUI::MessageBox($win, $return, $STR{'error'}, 0x40010);                     }
-        else         { Win32::GUI::MessageBox($win, $STR{'importedOUIDB'}, "XL-Parser $VERSION", 0x40040); }
-        });
-      }
-    }
-  }
-  return(1);
-  
-}  #--- End btnMACOUIDBImport_Click
 
 #--------------------------#
 sub chGeoIPDBAutoUpt_Click
@@ -14510,10 +14485,10 @@ sub chGeoIPDBAutoUpt_Click
   # Save the choice
   if ($winConfig->chGeoIPDBAutoUpt->Checked() == 1) {
     $CONFIG{'GEOIP_DB_AUTO_UPDATE'} = 1;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   } else {
     $CONFIG{'GEOIP_DB_AUTO_UPDATE'} = 0;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   }
 
 }  #--- End chGeoIPDBAutoUpt_Click
@@ -14527,7 +14502,7 @@ sub tfGeoIPDB_Change
   # Remember
   if ($GeoIPDBFile and -f $GeoIPDBFile and &validGeoIPDB($GeoIPDBFile)) {
     $CONFIG{'GEOIP_DB_FILE'} = $GeoIPDBFile;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
     # Reset options (Special objects)
     if ($win->tvSO->GetCount() > 1) {
       $win->tvSO->DeleteAllItems();
@@ -14538,10 +14513,10 @@ sub tfGeoIPDB_Change
     $winReport->chReportOptIncGeoIP->Enable();
   } else {
     delete($CONFIG{'GEOIP_DB_FILE'});
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
     if ($GeoIPDBFile) {
       $winConfig->tfGeoIPDB->Text('');
-      Win32::GUI::MessageBox($winConfig, $STR{'invalidFile'}, $STR{'error'}, 0x40010) if $START == 1;
+      Win32::GUI::MessageBox($winConfig, $STR{'invalidFile'}, $STR{'Error'}, 0x40010) if $START == 1;
     }
   }
 
@@ -14559,18 +14534,18 @@ sub btnGeoIPDB_Click
     my (@parts) = split(/\\/, $lastDir);
     if (pop(@parts) =~ /\./) { while ($lastDir =~ /[^\\]$/) { chop($lastDir); } }
     $GeoIPDBFile = Win32::GUI::GetOpenFileName( -owner         => $winConfig                ,
-                                                -title         => $STR{'selGeoIPFile'}.':'  ,
+                                                -title         => $STR{'selectDBFile'}.':'  ,
                                                 -defaultfilter => 0                         ,
                                                 -filemustexist => 1                         ,
                                                 -directory     => $lastDir                  ,
-                                                -file          => 'GeoLiteCity.dat'         ,
+                                                -file          => 'GeoLite2-City.mmdb'      ,
                                                 -explorer      => 1                         , );
   } else {
     $GeoIPDBFile = Win32::GUI::GetOpenFileName( -owner         => $winConfig                ,
-                                                -title         => $STR{'selGeoIPFile'}.':'  ,
+                                                -title         => $STR{'selectDBFile'}.':'  ,
                                                 -defaultfilter => 0                         ,
                                                 -filemustexist => 1                         ,
-                                                -file          => 'GeoLiteCity.dat'         ,
+                                                -file          => 'GeoLite2-City.mmdb'      ,
                                                 -explorer      => 1                         , );
   }
   # Selected file
@@ -14583,7 +14558,7 @@ sub btnGeoIPDB_Click
 sub btnGeoIPDBUpt_Click
 #--------------------------#
 {
-  if ($THR_UPDATE and $THR_UPDATE->is_running()) { Win32::GUI::MessageBox($win, $STR{'processRunning'}, $STR{'error'}, 0x40010); }
+  if ($THR_UPDATE and $THR_UPDATE->is_running()) { Win32::GUI::MessageBox($win, $STR{'processRunning'}, $STR{'Error'}, 0x40010); }
   else {
     $THR_UPDATE = threads->create(sub {
       # Thread 'cancellation' signal handler
@@ -14607,10 +14582,10 @@ sub btnGeoIPDBUpt_Click
         $winPb->lblCount->Text('');
         $winPb->pbWinPb->SetPos(0);
         $winPb->Hide();
-        Win32::GUI::MessageBox($win, "$STR{'errorMsg'}: $errMsg", $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($win, "$STR{'errorMsg'}: $errMsg", $STR{'Error'}, 0x40010);
       };
-      &updateGeoIPDB(1, $VERSION, $USERDIR, \$HOURGLASS, \$ARROW, $CONFIG_FILE, \%CONFIG, \$winConfig,
-                     \$winPb, \$win, \%STR);
+      &updateDB(1, 'GeoIP', $STR{'GeoIPDB'}, $winConfig->tfGeoIPDB->Text(), 'Maxmind', 'GeoLite2-City.mmdb', $USERDIR, \$HOURGLASS, \$ARROW,
+                \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj, \$winPb, \$win, \%STR);
     });
   }
   return(1);
@@ -14624,15 +14599,15 @@ sub tfExprHistoDB_Change
   # Local variables
   my $exprHistoDBFile = $winConfig->tfExprHistoDB->Text();
   # Remember
-  if ($exprHistoDBFile and -f $exprHistoDBFile and &validExprHistoDB($exprHistoDBFile)) {
+  if ($exprHistoDBFile and -f $exprHistoDBFile and &validSQLiteDB($exprHistoDBFile, 'EXPR_HISTO_DB')) {
     $CONFIG{'EXPR_HISTO_DB'} = $exprHistoDBFile;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   } else {
     delete($CONFIG{'EXPR_HISTO_DB'});
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
     if ($exprHistoDBFile) {
       $winConfig->tfExprHistoDB->Text('');
-      Win32::GUI::MessageBox($win, $STR{'invalidFile'}, $STR{'error'}, 0x40010) if $START == 1;
+      Win32::GUI::MessageBox($win, $STR{'invalidFile'}, $STR{'Error'}, 0x40010) if $START == 1;
     }
   }
 
@@ -14695,15 +14670,15 @@ sub tfExprDB_Change
   # Local variables
   my $exprDBFile = $winConfig->tfExprDB->Text();
   # Remember
-  if ($exprDBFile and -f $exprDBFile and &validExprDB($exprDBFile)) {
+  if ($exprDBFile and -f $exprDBFile and &validSQLiteDB($exprDBFile, 'EXPR_DB')) {
     $CONFIG{'EXPR_DB'} = $exprDBFile;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   } else {
     delete($CONFIG{'EXPR_DB'});
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
     if ($exprDBFile) {
       $winConfig->tfExprDB->Text('');
-      Win32::GUI::MessageBox($win, $STR{'invalidFile'}, $STR{'error'}, 0x40010) if $START == 1;
+      Win32::GUI::MessageBox($win, $STR{'invalidFile'}, $STR{'Error'}, 0x40010) if $START == 1;
     }
   }
 
@@ -14770,17 +14745,17 @@ sub btnExprDBImport_Click
                                                 -filemustexist => 1                          ,
                                                 -file          => 'Expr.db'                  ,
                                                 -explorer      => 1                          , );
-  if ($exprDBFile and &validExprDB($exprDBFile)) {
+  if ($exprDBFile and &validSQLiteDB($exprDBFile, 'EXPR_DB')) {
     # Load all expressions from the database to import
     $exprDBFile = encode('utf8', $exprDBFile);
     my $dsn     = "DBI:SQLite:dbname=$exprDBFile";
     my $dbh     = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
-                  or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+                  or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'Error'}, 0x40010);
     # Check if EXPR_DB table exists
     my $sth;
     eval { $sth = $dbh->table_info(undef, undef, '%', 'TABLE'); };
     if ($@) {
-      Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+      Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'Error'}, 0x40010);
       return(0);
     }
     my @info = $sth->fetchrow_array;
@@ -14793,7 +14768,7 @@ sub btnExprDBImport_Click
       $curExprDBFile    = encode('utf8', $curExprDBFile);
       $dsn              = "DBI:SQLite:dbname=$curExprDBFile";
       $dbh              = DBI->connect($dsn, undef, undef, { RaiseError => 1, AutoCommit => 1 })
-                          or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'error'}, 0x40010);
+                          or Win32::GUI::MessageBox($win, $STR{'errorConnectDB'}.$DBI::errstr, $STR{'Error'}, 0x40010);
       # Database: table = EXPR_DB, Fields = used, matchcase, regex, invert, expr, comment
       my $sth = $dbh->prepare("insert or ignore into EXPR_DB (used, matchcase, regex, invert, expr, comment) values(?,?,?,?,?,?)");
       # Add each expression that don't already exists
@@ -14801,12 +14776,12 @@ sub btnExprDBImport_Click
         my (@values) = @$row;
         my $rv = $sth->execute(0, $values[1], $values[2], $values[3], $values[4], $values[5]);
         if ($rv < 0) {
-          Win32::GUI::MessageBox($winExtraction, $STR{'errorMsg'}.$DBI::errstr, $STR{'error'}, 0x40010);
+          Win32::GUI::MessageBox($winExtraction, $STR{'errorMsg'}.$DBI::errstr, $STR{'Error'}, 0x40010);
           return(0);
         }
       }
       return(1);
-    } else { Win32::GUI::MessageBox($win, $STR{'errorDB'}, $STR{'error'}, 0x40010); return(0); }
+    } else { Win32::GUI::MessageBox($win, $STR{'errorDB'}, $STR{'Error'}, 0x40010); return(0); }
     # Final message
     Win32::GUI::MessageBox($winConfig, $STR{'createdDB'}, $STR{'exprDatabase'}, 0x40040);
   }
@@ -14820,15 +14795,15 @@ sub tfLFDB_Change
   # Local variables
   my $LFDBFile = $winConfig->tfLFDB->Text();
   # Remember
-  if ($LFDBFile and -f $LFDBFile and &validLFDB($LFDBFile)) {
+  if ($LFDBFile and -f $LFDBFile and &validSQLiteDB($LFDBFile, 'LF')) {
     $CONFIG{'LF_DB_FILE'} = $LFDBFile;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   } else {
     delete($CONFIG{'LF_DB_FILE'});
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
     if ($LFDBFile) {
       $winConfig->tfLFDB->Text('');
-      Win32::GUI::MessageBox($win, $STR{'invalidFile'}, $STR{'error'}, 0x40010) if $START == 1;
+      Win32::GUI::MessageBox($win, $STR{'invalidFile'}, $STR{'Error'}, 0x40010) if $START == 1;
     }
   }
 
@@ -14880,7 +14855,7 @@ sub btnNewLFDB_Click
                                               -filter           => [$STR{'dbFile'}.' (*.db)', '.db'],
                                               -overwriteprompt  => 1                                , );
   if ($LFDBFile and &createLFDB($LFDBFile)) {
-    Win32::GUI::MessageBox($winConfig, $STR{'createdDB'}, $STR{'winLFDB'}, 0x40040);
+    Win32::GUI::MessageBox($winConfig, $STR{'createdDB'}, $STR{'LFDB'}, 0x40040);
     $winConfig->tfLFDB->Text($LFDBFile);
   }
   return(1);
@@ -14891,7 +14866,7 @@ sub btnNewLFDB_Click
 sub btnLFDBUpt_Click
 #--------------------------#
 {
-  if ($THR_UPDATE and $THR_UPDATE->is_running()) { Win32::GUI::MessageBox($win, $STR{'processRunning'}, $STR{'error'}, 0x40010); }
+  if ($THR_UPDATE and $THR_UPDATE->is_running()) { Win32::GUI::MessageBox($win, $STR{'processRunning'}, $STR{'Error'}, 0x40010); }
   else {
     $THR_UPDATE = threads->create(sub {
       # Thread 'cancellation' signal handler
@@ -14915,12 +14890,13 @@ sub btnLFDBUpt_Click
         $winPb->lblCount->Text('');
         $winPb->pbWinPb->SetPos(0);
         $winPb->Hide();
-        Win32::GUI::MessageBox($win, "$STR{'errorMsg'}: $errMsg", $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($win, "$STR{'errorMsg'}: $errMsg", $STR{'Error'}, 0x40010);
       };
-      my $errMsg = &downloadLFDB("$USERDIR\\LF.db", $USERDIR, \$HOURGLASS, \$ARROW, $CONFIG_FILE, \%CONFIG,
-                                 \$winConfig, \$winLFDB, \$winLFObj, \$winPb, \$win, \%STR);
-      if ($errMsg) { Win32::GUI::MessageBox($win, "$errMsg"          , $STR{'error'}      , 0x40010); }
-      else         { Win32::GUI::MessageBox($win, $STR{'updatedLFDB'}, "XL-Parser $VERSION", 0x40040); }
+      my ($status, $return) = &downloadDB(\$winConfig, 'LF', $STR{'LFDB'}, "$USERDIR\\LF.db", 'le-tools.com', \$HOURGLASS,
+                                          \$ARROW, \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj,
+                                          \$winPb, \$win, \%STR);
+      if ($status) { Win32::GUI::MessageBox($winConfig, "$STR{'LFDB'} $STR{'HasBeenUpdated'}", "XL-Parser $VERSION", 0x40040); }
+      else         { Win32::GUI::MessageBox($winConfig, $return, $STR{'Error'}, 0x40010); }
     });
   }
   return(1);
@@ -14936,13 +14912,13 @@ sub tfLAFiltersDB_Change
   # Remember
   if ($LAFiltersDBFile and -f $LAFiltersDBFile and &validLAFilterSetDB($LAFiltersDBFile)) {
     $CONFIG{'LAFILTERS_DB_FILE'} = $LAFiltersDBFile;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   } else {
     delete($CONFIG{'LAFILTERS_DB_FILE'});
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
     if ($LAFiltersDBFile) {
       $winConfig->tfLAFiltersDB->Text('');
-      Win32::GUI::MessageBox($win, $STR{'invalidFile'}, $STR{'error'}, 0x40010) if $START == 1;
+      Win32::GUI::MessageBox($win, $STR{'invalidFile'}, $STR{'Error'}, 0x40010) if $START == 1;
     }
   }
 
@@ -15010,13 +14986,13 @@ sub tfSavedQueriesDB_Change
   # Remember
   if ($savedQueriesDBFile and -f $savedQueriesDBFile and &validSavedQueriesDB($savedQueriesDBFile)) {
     $CONFIG{'SAVED_QUERIES_DB_FILE'} = $savedQueriesDBFile;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   } else {
     delete($CONFIG{'SAVED_QUERIES_DB_FILE'});
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
     if ($savedQueriesDBFile) {
       $winConfig->tfSavedQueriesDB->Text('');
-      Win32::GUI::MessageBox($winConfig, $STR{'invalidFile'}, $STR{'error'}, 0x40010) if $START == 1;
+      Win32::GUI::MessageBox($winConfig, $STR{'invalidFile'}, $STR{'Error'}, 0x40010) if $START == 1;
     }
   }
 
@@ -15082,9 +15058,9 @@ sub tfXLWHOISDB_Change
   # Local variables
   my $XLWHOISDBFile = $winConfig->tfXLWHOISDB->Text();
   # Remember
-  if ($XLWHOISDBFile and -f $XLWHOISDBFile and &validXLWHOISDB($XLWHOISDBFile)) {
+  if ($XLWHOISDBFile and -f $XLWHOISDBFile and &validSQLiteDB($XLWHOISDBFile, 'WHOIS_DB')) {
     $CONFIG{'XLWHOIS_DB_FILE'} = $XLWHOISDBFile;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
     # Reset options (Special objects)
     if ($win->tvSO->GetCount() > 1) {
       $win->tvSO->DeleteAllItems();
@@ -15095,10 +15071,10 @@ sub tfXLWHOISDB_Change
     $winReport->chReportOptIncISP->Enable();
   } else {
     delete($CONFIG{'XLWHOIS_DB_FILE'});
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
     if ($XLWHOISDBFile) {
       $winConfig->tfXLWHOISDB->Text('');
-      Win32::GUI::MessageBox($win, $STR{'invalidFile'}, $STR{'error'}, 0x40010) if $START == 1;
+      Win32::GUI::MessageBox($win, $STR{'invalidFile'}, $STR{'Error'}, 0x40010) if $START == 1;
     }
   }
 
@@ -15143,9 +15119,9 @@ sub tfIINDB_Change
   # Local variables
   my $IINDBFile = $winConfig->tfIINDB->Text();
   # Remember
-  if ($IINDBFile and -f $IINDBFile and &validIINDB($IINDBFile)) {
+  if ($IINDBFile and -f $IINDBFile and &validSQLiteDB($IINDBFile, 'IIN')) {
     $CONFIG{'IIN_DB_FILE'} = $IINDBFile;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
     # Reset options (Special objects)
     if ($win->tvSO->GetCount() > 1) {
       $win->tvSO->DeleteAllItems();
@@ -15154,10 +15130,10 @@ sub tfIINDB_Change
     }
   } else {
     delete($CONFIG{'IIN_DB_FILE'});
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
     if ($IINDBFile) {
       $winConfig->tfIINDB->Text('');
-      Win32::GUI::MessageBox($win, $STR{'invalidFile'}, $STR{'error'}, 0x40010) if $START == 1;
+      Win32::GUI::MessageBox($win, $STR{'invalidFile'}, $STR{'Error'}, 0x40010) if $START == 1;
     }
   }
 
@@ -15202,7 +15178,7 @@ sub btnIINDB_Click
 sub btnIINDBUpt_Click
 #--------------------------#
 {
-  if ($THR_UPDATE and $THR_UPDATE->is_running()) { Win32::GUI::MessageBox($win, $STR{'processRunning'}, $STR{'error'}, 0x40010); }
+  if ($THR_UPDATE and $THR_UPDATE->is_running()) { Win32::GUI::MessageBox($win, $STR{'processRunning'}, $STR{'Error'}, 0x40010); }
   else {
     $THR_UPDATE = threads->create(sub {
       # Thread 'cancellation' signal handler
@@ -15226,12 +15202,13 @@ sub btnIINDBUpt_Click
         $winPb->lblCount->Text('');
         $winPb->pbWinPb->SetPos(0);
         $winPb->Hide();
-        Win32::GUI::MessageBox($win, "$STR{'errorMsg'}: $errMsg", $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($win, "$STR{'errorMsg'}: $errMsg", $STR{'Error'}, 0x40010);
       };
-      my $errMsg = &downloadIINDB("$USERDIR\\IIN.db", $USERDIR, \$HOURGLASS, \$ARROW, $CONFIG_FILE, \%CONFIG,
-                                  \$winConfig, \$winPb, \$win, \%STR);
-      if ($errMsg) { Win32::GUI::MessageBox($win, "$errMsg"           , $STR{'error'}      , 0x40010); }
-      else         { Win32::GUI::MessageBox($win, $STR{'updatedIINDB'}, "XL-Parser $VERSION", 0x40040); }
+      my ($status, $return) = &downloadDB(\$winConfig, 'IIN', $STR{'IINDB'}, "$USERDIR\\IIN.db", 'le-tools.com', \$HOURGLASS,
+                                          \$ARROW, \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj,
+                                          \$winPb, \$win, \%STR);
+      if ($status) { Win32::GUI::MessageBox($winConfig, "$STR{'IINDB'} $STR{'HasBeenUpdated'}", "XL-Parser $VERSION", 0x40040); }
+      else         { Win32::GUI::MessageBox($winConfig, $return, $STR{'Error'}, 0x40010); }
     });
   }
   return(1);
@@ -15245,10 +15222,10 @@ sub chTLDDBAutoUpt_Click
   # Save the choice
   if ($winConfig->chTLDDBAutoUpt->Checked()) {
     $CONFIG{'TLD_DB_AUTO_UPDATE'} = 1;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   } else {
     $CONFIG{'TLD_DB_AUTO_UPDATE'} = 0;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   }
 
 }  #--- End chTLDDBAutoUpt_Click
@@ -15262,13 +15239,13 @@ sub tfTLDDB_Change
   # Remember
   if ($TLDdbFile and -f $TLDdbFile and &validTLDDB($TLDdbFile)) {
     $CONFIG{'TLD_DB_FILE'} = $TLDdbFile;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
   } else {
     delete($CONFIG{'TLD_DB_FILE'});
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
     if ($TLDdbFile) {
       $winConfig->tfTLDDB->Text('');
-      Win32::GUI::MessageBox($winConfig, $STR{'errNoValidFile'}, $STR{'error'}, 0x40010) if $START == 1;
+      Win32::GUI::MessageBox($winConfig, $STR{'errNoValidFile'}, $STR{'Error'}, 0x40010) if $START == 1;
     }
   }
 
@@ -15286,7 +15263,7 @@ sub btnTLDDB_Click
     my(@parts) = split(/\\/, $lastDir);
     if (pop(@parts) =~ /\./) { while ($lastDir =~ /[^\\]$/) { chop($lastDir); } }
     $TLDdbFile = Win32::GUI::GetOpenFileName( -owner         => $winConfig                ,
-                                              -title         => $STR{'btnTLDDBTip'}.':'   ,
+                                              -title         => $STR{'selectDBFile'}.':'  ,
                                               -defaultfilter => 0                         ,
                                               -filemustexist => 1                         ,
                                               -directory     => $lastDir                  ,
@@ -15294,7 +15271,7 @@ sub btnTLDDB_Click
                                               -explorer      => 1                         , );
   } else {
     $TLDdbFile = Win32::GUI::GetOpenFileName( -owner         => $winConfig                ,
-                                              -title         => $STR{'btnTLDDBTip'}.':'   ,
+                                              -title         => $STR{'selectDBFile'}.':'  ,
                                               -defaultfilter => 0                         ,
                                               -filemustexist => 1                         ,
                                               -file          => 'effective_tld_names.dat' ,
@@ -15311,8 +15288,8 @@ sub btnTLDDBUpt_Click
 #--------------------------#
 {
   threads->create(sub {
-    &updateTLDDB(1, $VERSION, $winConfig->tfTLDDB->Text(), \$HOURGLASS, \$ARROW, $CONFIG_FILE, \%CONFIG, \$winConfig,
-                 \$winPb, \$win, \%STR);
+    &updateDB(1, 'TLD', $STR{'lblTLDDB'}, $winConfig->tfTLDDB->Text(), 'publicsuffix.org', 'effective_tld_names.dat', $USERDIR,
+              \$HOURGLASS, \$ARROW, \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj, \$winPb, \$win, \%STR);
   });
   return(1);
   
@@ -15325,9 +15302,9 @@ sub tfResTLDDB_Change
   # Local variables
   my $resTLDDBFile = $winConfig->tfResTLDDB->Text();
   # Remember
-  if ($resTLDDBFile and -f $resTLDDBFile and &validResTLDDB($resTLDDBFile)) {
+  if ($resTLDDBFile and -f $resTLDDBFile and &validSQLiteDB($resTLDDBFile, 'DATA')) {
     $CONFIG{'RES_TLD_DB_FILE'} = $resTLDDBFile;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
     # Reset options (Special objects)
     if ($win->tvSO->GetCount() > 1) {
       $win->tvSO->DeleteAllItems();
@@ -15336,10 +15313,10 @@ sub tfResTLDDB_Change
     }
   } else {
     delete($CONFIG{'RES_TLD_DB_FILE'});
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
     if ($resTLDDBFile) {
       $winConfig->tfResTLDDB->Text('');
-      Win32::GUI::MessageBox($win, $STR{'invalidFile'}, $STR{'error'}, 0x40010) if $START == 1;
+      Win32::GUI::MessageBox($win, $STR{'invalidFile'}, $STR{'Error'}, 0x40010) if $START == 1;
     }
   }
 
@@ -15384,7 +15361,7 @@ sub btnResTLDDB_Click
 sub btnResTLDDBUpt_Click
 #--------------------------#
 {
-  if ($THR_UPDATE and $THR_UPDATE->is_running()) { Win32::GUI::MessageBox($win, $STR{'processRunning'}, $STR{'error'}, 0x40010); }
+  if ($THR_UPDATE and $THR_UPDATE->is_running()) { Win32::GUI::MessageBox($win, $STR{'processRunning'}, $STR{'Error'}, 0x40010); }
   else {
     $THR_UPDATE = threads->create(sub {
       # Thread 'cancellation' signal handler
@@ -15408,12 +15385,13 @@ sub btnResTLDDBUpt_Click
         $winPb->lblCount->Text('');
         $winPb->pbWinPb->SetPos(0);
         $winPb->Hide();
-        Win32::GUI::MessageBox($win, "$STR{'errorMsg'}: $errMsg", $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($win, "$STR{'errorMsg'}: $errMsg", $STR{'Error'}, 0x40010);
       };
-      my $errMsg = &downloadResTLDDB("$USERDIR\\Resolve TLD.db", $USERDIR, \$HOURGLASS, \$ARROW, $CONFIG_FILE, \%CONFIG,
-                                     \$winConfig, \$winPb, \$win, \%STR);
-      if ($errMsg) { Win32::GUI::MessageBox($winConfig, "$errMsg"              , $STR{'error'}      , 0x40010); }
-      else         { Win32::GUI::MessageBox($winConfig, $STR{'updatedResTLDDB'}, "XL-Parser $VERSION", 0x40040); }
+      my ($status, $return) = &downloadDB(\$winConfig, 'ResTLD', $STR{'ResTLDDB'}, "$USERDIR\\Resolve TLD.db", 'le-tools.com',
+                                          \$HOURGLASS, \$ARROW, \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj,
+                                          \$winPb, \$win, \%STR);
+      if ($status) { Win32::GUI::MessageBox($winConfig, "$STR{'IINDB'} $STR{'HasBeenUpdated'}", "XL-Parser $VERSION", 0x40040); }
+      else         { Win32::GUI::MessageBox($winConfig, $return, $STR{'Error'}, 0x40010); }
       $winConfig->BringWindowToTop();
     });
   }
@@ -15428,9 +15406,9 @@ sub tfDTDB_Change
   # Local variables
   my $DTDBFile = $winConfig->tfDTDB->Text();
   # Remember
-  if ($DTDBFile and -f $DTDBFile and &validDTDB($DTDBFile)) {
+  if ($DTDBFile and -f $DTDBFile and &validSQLiteDB($DTDBFile, 'DT')) {
     $CONFIG{'DT_DB_FILE'} = $DTDBFile;
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
     $win->cbLF->Enable();
     $win->btnWinLFDB->Enable();
     $win->btnLFGuess->Enable();
@@ -15455,10 +15433,10 @@ sub tfDTDB_Change
     }
   } else {
     delete($CONFIG{'DT_DB_FILE'});
-    &saveConfig($CONFIG_FILE, \%CONFIG);
+    &saveConfig(\%CONFIG, $CONFIG_FILE);
     if ($DTDBFile) {
       $winConfig->tfDTDB->Text('');
-      Win32::GUI::MessageBox($win, $STR{'invalidFile'}, $STR{'error'}, 0x40010) if $START == 1;
+      Win32::GUI::MessageBox($win, $STR{'invalidFile'}, $STR{'Error'}, 0x40010) if $START == 1;
     }
   }
 
@@ -15521,7 +15499,7 @@ sub btnNewDTDB_Click
 sub btnDTDBUpt_Click
 #--------------------------#
 {
-  if ($THR_UPDATE and $THR_UPDATE->is_running()) { Win32::GUI::MessageBox($win, $STR{'processRunning'}, $STR{'error'}, 0x40010); }
+  if ($THR_UPDATE and $THR_UPDATE->is_running()) { Win32::GUI::MessageBox($win, $STR{'processRunning'}, $STR{'Error'}, 0x40010); }
   else {
     $THR_UPDATE = threads->create(sub {
       # Thread 'cancellation' signal handler
@@ -15545,12 +15523,13 @@ sub btnDTDBUpt_Click
         $winPb->lblCount->Text('');
         $winPb->pbWinPb->SetPos(0);
         $winPb->Hide();
-        Win32::GUI::MessageBox($win, "$STR{'errorMsg'}: $errMsg", $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($win, "$STR{'errorMsg'}: $errMsg", $STR{'Error'}, 0x40010);
       };
-      my $errMsg = &downloadDTDB("$USERDIR\\DT.db", $USERDIR, \$HOURGLASS, \$ARROW, $CONFIG_FILE, \%CONFIG,
-                                 \$winConfig, \$winLFObj, \$winDTDB, \$winReport, \$winPb, \$win, \%STR);
-      if ($errMsg) { Win32::GUI::MessageBox($win, "$errMsg"          , $STR{'error'}      , 0x40010); }
-      else         { Win32::GUI::MessageBox($win, $STR{'updatedDTDB'}, "XL-Parser $VERSION", 0x40040); }
+      my ($status, $return) = &downloadDB(\$winConfig, 'DT', $STR{'winDTDB'}, "$USERDIR\\DT.db", 'le-tools.com', \$HOURGLASS,
+                                          \$ARROW, \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj,
+                                          \$winPb, \$win, \%STR);
+      if ($status) { Win32::GUI::MessageBox($winConfig, "$STR{'winDTDB'} $STR{'HasBeenUpdated'}", "XL-Parser $VERSION", 0x40040); }
+      else         { Win32::GUI::MessageBox($winConfig, $return, $STR{'Error'}, 0x40010); }
     });
   }
   return(1);
@@ -15638,10 +15617,11 @@ sub isProcessReady
       # A SQL Query must be set
       if    (!$nextStep and !$win->tfLAQuery->Text()) { $nextStep = $STR{'setSQLQuery'}; }
       # The SQL query must be tested
-      if (!$nextStep and my $query = $win->tfLAQuery->Text() and (!$win->tfLAQueryValidHidden->Text() or $win->tfLAQueryValidHidden->Text() != 1)) {
-        $nextStep = $STR{'mustTestQuery'};
+      #if (!$nextStep and my $query = $win->tfLAQuery->Text() and (!$win->tfLAQueryValidHidden->Text() or $win->tfLAQueryValidHidden->Text() != 1)) {
+      #  $nextStep = $STR{'mustTestQuery'};
+      #}
       # A destination folder is required
-      } elsif (!$nextStep and !$winReport->tfReportDir->Text()) { $nextStep = $STR{'setDestDir'};  }
+      if (!$nextStep and !$winReport->tfReportDir->Text()) { $nextStep = $STR{'setDestDir'};  }
       $win->tfLAQuery->Show();
     # Search Database - Suspicious activities
     } elsif ($LAFunctionStr eq $STR{'SearchSA'}) {
@@ -15704,7 +15684,7 @@ sub btnProcess_Click
 #--------------------------#
 {
   # Avoid new thread
-  if ($THR_PROCESS and $THR_PROCESS->is_running()) { Win32::GUI::MessageBox($win, $STR{'processRunning'}, $STR{'error'}, 0x40010); }
+  if ($THR_PROCESS and $THR_PROCESS->is_running()) { Win32::GUI::MessageBox($win, $STR{'processRunning'}, $STR{'Error'}, 0x40010); }
   else {
     # Log analysis : Database exists in the destination folder
     my $LAFunctionStr = $win->LAFunctions->GetString($win->LAFunctions->SelectedItem());
@@ -15741,7 +15721,7 @@ sub btnProcess_Click
         $win->btnProcess->Show();
         $win->btnStop->Hide();
         $win->ChangeCursor($ARROW);
-        Win32::GUI::MessageBox($win, "$STR{'errorMsg'}: $errMsg", $STR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($win, "$STR{'errorMsg'}: $errMsg", $STR{'Error'}, 0x40010);
         threads->exit();
       };
       # Local variables
@@ -15855,7 +15835,7 @@ sub btnHelp_Click
 #--------------------------#
 {
   # Open XL-Parser documentation page with default browser
-  $win->ShellExecute('open', $URL_DOC,'','',1) or Win32::GUI::MessageBox($win, Win32::FormatMessage(Win32::GetLastError()), "$STR{'update3'} XL-Parser",0x40010);
+  $win->ShellExecute('open', $URL_DOC,'','',1) or Win32::GUI::MessageBox($win, Win32::FormatMessage(Win32::GetLastError()), "$STR{'Update'} XL-Parser",0x40010);
 
 }  #--- End btnHelp_Click
 
@@ -15900,7 +15880,7 @@ sub btnAbout_Click
                         -pos         => [140, 80]               ,
                         -font        => $font10                 ,
                         -background  => [255, 255, 255]         ,
-                        -text        => '© Copyright 2016-2018 Alain Rioux', );
+                        -text        => '© Copyright 2016-2019 Alain Rioux', );
   $winAbout->Center($win);
   $winAbout->DoModal();
   return(1);

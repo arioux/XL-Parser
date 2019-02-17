@@ -6,10 +6,10 @@
 # SourceForge					: https://sourceforge.net/p/xl-parser
 # GitHub							: https://github.com/arioux/XL-Parser
 # Creation						: 2016-07-15
-# Modified						: 2018-04-08
+# Modified						: 2019-02-17
 # Author							: Alain Rioux (admin@le-tools.com)
 #
-# Copyright (C) 2016-2018  Alain Rioux (le-tools.com)
+# Copyright (C) 2016-2019  Alain Rioux (le-tools.com)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -137,9 +137,9 @@ sub updateExprDBUsed
       # Database: table = EXPR_DB, Fields = used, matchcase, regex, invert, expr, comment
       my $sth = $dbh->prepare('UPDATE EXPR_DB SET used = ? WHERE ? == expr');
       my $rv  = $sth->execute($usedValue, $expr);
-      Win32::GUI::MessageBox($$refWin, $$refSTR{'errUpdatingDB'}.$DBI::errstr, $$refSTR{'error'}, 0x40010) if $rv < 0;
+      Win32::GUI::MessageBox($$refWin, $$refSTR{'errUpdatingDB'}.$DBI::errstr, $$refSTR{'Error'}, 0x40010) if $rv < 0;
       $dbh->disconnect();
-    } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.$DBI::errstr, $$refSTR{'error'}, 0x40010); }
+    } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.$DBI::errstr, $$refSTR{'Error'}, 0x40010); }
     # Sort grid
     $$refWinExtraction->gridExprDatabase->SortCells(0, 0, sub { my ($e1, $e2) = @_; return ($e1 <=> $e2); }); # Sort by used, descending
     $$refWinExtraction->gridExprDatabase->Refresh();
@@ -310,6 +310,7 @@ sub extractSOFiles
 	$extractParams{RES_TLD_DB_FILE}  = $$refConfig{'RES_TLD_DB_FILE'};
 	$extractParams{XLWHOIS_DB_FILE}  = $$refConfig{'XLWHOIS_DB_FILE'};
 	$extractParams{GEOIP_DB_FILE} 	 = $$refConfig{'GEOIP_DB_FILE'};
+	$extractParams{GEOIP_LANG}			 = $$refConfig{'GEOIP_LANG'};
 	$extractParams{MACOUI_DB_FILE} 	 = $$refConfig{'MACOUI_DB_FILE'};
 	$extractParams{IIN_DB_FILE}   	 = $$refConfig{'IIN_DB_FILE'};
 	$extractParams{NSLOOKUP_TIMEOUT} = $$refConfig{'NSLOOKUP_TIMEOUT'};
@@ -562,6 +563,7 @@ sub selFileFormats
   foreach my $ext (@{$refListExt}) {
     for (my $row = 1; $row <= $$refWinFileFormats->gridFileFormats->GetRows(); $row++) {
       my $extensions = $$refWinFileFormats->gridFileFormats->GetCellText($row, 2);
+			$ext = lc($ext); # Lowercase
       $$refWinFileFormats->gridFileFormats->SetCellCheck($row, 0, 1) if $extensions =~ /\.$ext(?:,|$)/;
     }
   }
@@ -969,7 +971,7 @@ sub splitLogs
 		if ($$refWin->chOpenSplitDestDir->Checked()) {
 			Win32::Process::Create(my $ProcessObj, "$ENV{'WINDIR'}\\explorer.exe", "explorer $destFolder", 0, NORMAL_PRIORITY_CLASS, ".");
 		}
-	} else { Win32::GUI::MessageBox($$refWin, $$refSTR{'noFile'}, $$refSTR{'error'}, 0x40010); } # No files
+	} else { Win32::GUI::MessageBox($$refWin, $$refSTR{'noFile'}, $$refSTR{'Error'}, 0x40010); } # No files
   
 }  #--- End splitLogs
 

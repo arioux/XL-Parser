@@ -6,10 +6,10 @@
 # SourceForge						: https://sourceforge.net/p/xl-parser
 # GitHub								: https://github.com/arioux/XL-Parser
 # Creation							: 2016-07-15
-# Modified							: 2018-01-06
+# Modified							: 2019-02-17
 # Author								: Alain Rioux (admin@le-tools.com)
 #
-# Copyright (C) 2016-2018 Alain Rioux (le-tools.com)
+# Copyright (C) 2016-2019 Alain Rioux (le-tools.com)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -113,7 +113,7 @@ sub createLADB
     $processObj->Wait(INFINITE) if $$refWin->chLASelectDB->Checked();
     $$refWin->Enable();
     $$refWin->BringWindowToTop();
-  } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'noFile'}, $$refSTR{'error'}, 0x40010); } # No files
+  } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'noFile'}, $$refSTR{'Error'}, 0x40010); } # No files
   
 }  #--- End createLADB
 
@@ -264,8 +264,7 @@ sub updateLADB
   }
   $$refWin->Disable();
   # Start Log Analysis Process
-  my $command = 'XL-Parser-process LADB-UpdateDB';
-  $command .= " $procID \"$PROGDIR\" \"$destDir\" \"$USERDIR\"";
+  my $command = 'XL-Parser-process LADB-UpdateDB' . " $procID \"$PROGDIR\" \"$destDir\" \"$USERDIR\"";
   Win32::Process::Create(my $processObj, $PROGDIR .'\XL-Parser-process.exe', $command, 0, NORMAL_PRIORITY_CLASS, $PROGDIR);
   $processObj->Wait(INFINITE) if $$refWin->chLASelectDB->Checked();
   $$refWin->Enable();
@@ -438,7 +437,7 @@ sub updateCurrDatabaseInfos
     }
     $dbh->disconnect();
     $$refWin->btnLACurrDBFiles->Enable();
-  } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'error'}, 0x40010); }
+  } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'Error'}, 0x40010); }
 
 }  #--- End updateCurrDatabaseInfos
 
@@ -494,7 +493,7 @@ sub loadCurrDBFiles
     $$refWinLACurrDBFiles->gridCurrDBListFiles->ExpandLastColumn();
     $$refWinLACurrDBFiles->gridCurrDBListFiles->Refresh();
     $dbh->disconnect();
-  } else { Win32::GUI::MessageBox($$refWinLACurrDBFiles, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'error'}, 0x40010); }
+  } else { Win32::GUI::MessageBox($$refWinLACurrDBFiles, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'Error'}, 0x40010); }
 
 }  #--- End loadCurrDBFiles
 
@@ -560,50 +559,79 @@ sub queryLADB
 {
   # Local variables
   my ($PROGDIR, $USERDIR, $refWinReport, $refWinLASavedQueries, $refWinConfig, $refWin, $refSTR) = @_;
-  # Hide Progress controls in main window
-  $$refWin->lblPbCurr->Text('');
-  $$refWin->pb->SetPos(0);
-  $$refWin->lblPbCount->Text('');
-  $$refWin->lblPbCurr->Hide();
-  $$refWin->pb->Hide();
-  $$refWin->lblPbCount->Hide();
-  my %queryParams;
-  $queryParams{dbFile}       = $$refWin->tfInput->Text();
-  $queryParams{query}        = $$refWin->tfLAQuery->Text();
-  $queryParams{reportDir}    = $$refWinReport->tfReportDir->Text();
-  $queryParams{reportFormat} = $$refWinReport->cbReportFormat->GetString($$refWinReport->cbReportFormat->GetCurSel());
-  $queryParams{replReport}   = 1 if $$refWinReport->chReplaceReport->Checked();
-  $queryParams{openReport}   = 1 if $$refWinReport->chOpenReport->Checked();
-  $queryParams{incHeader}    = 1 if $$refWinReport->chReportOptIncHeaders->Checked();
-  $queryParams{incSource}    = 1 if $$refWinReport->chReportOptIncSource->Checked();
-  $queryParams{incISP}       = 1 if $$refWinReport->chReportOptIncISP->Checked();
-  $queryParams{incGeoIP}     = 1 if $$refWinReport->chReportOptIncGeoIP->Checked();
-  $queryParams{incUADetails} = 1 if $$refWinReport->chReportOptIncUADetails->Checked();
-  $queryParams{incWeekdays}  = 1 if $$refWinReport->chReportOptIncWeekday->Checked();
-  my $selOutputDTFormat      = $$refWinReport->cbOutputDTFormat->GetCurSel();
-  $queryParams{localTZ}      = $$refWinConfig->cbLocalTZ->GetString($$refWinConfig->cbLocalTZ->GetCurSel());
-  $queryParams{language}     = $$refWinConfig->cbDefaultLang->GetString($$refWinConfig->cbDefaultLang->GetCurSel());
-  ($queryParams{outPattern}, $queryParams{outTZ}) = (&infoDTFormat($$refWinReport->cbOutputDTFormat->GetString($selOutputDTFormat)))[1,3];
-  # Update Saved Queries database (used indicator)
-  &updateSavedQueriesUsed($queryParams{query}, $refWinLASavedQueries, $refWinConfig, $refWin, $refSTR);
-  # Save query params and options as JSON
-  my $destDir = $queryParams{dbFile};
-  while (chop($destDir) ne "\\") { } # Dir only
-  my $procID  = time;
-  my $jsonObj = JSON->new;
-  my $jsonText = $jsonObj->encode(\%queryParams);
-  if (open(my $json, '>:encoding(cp1252)', "$destDir\\CurrentQueryParams-" . $procID .'.json')) {
-    print $json $jsonText;
-    close($json);
+  my ($return, $msg) = &validLABDQuery($refWin, $refSTR);
+  if ($return) {
+		# Hide Progress controls in main window
+		$$refWin->lblPbCurr->Text('');
+		$$refWin->pb->SetPos(0);
+		$$refWin->lblPbCount->Text('');
+		$$refWin->lblPbCurr->Hide();
+		$$refWin->pb->Hide();
+		$$refWin->lblPbCount->Hide();
+		my %queryParams;
+		$queryParams{dbFile}       = $$refWin->tfInput->Text();
+		$queryParams{query}        = $$refWin->tfLAQuery->Text();
+		$queryParams{reportDir}    = $$refWinReport->tfReportDir->Text();
+		$queryParams{reportFormat} = $$refWinReport->cbReportFormat->GetString($$refWinReport->cbReportFormat->GetCurSel());
+		$queryParams{replReport}   = 1 if $$refWinReport->chReplaceReport->Checked();
+		$queryParams{openReport}   = 1 if $$refWinReport->chOpenReport->Checked();
+		$queryParams{incHeader}    = 1 if $$refWinReport->chReportOptIncHeaders->Checked();
+		$queryParams{incSource}    = 1 if $$refWinReport->chReportOptIncSource->Checked();
+		$queryParams{incISP}       = 1 if $$refWinReport->chReportOptIncISP->Checked();
+		$queryParams{incGeoIP}     = 1 if $$refWinReport->chReportOptIncGeoIP->Checked();
+		$queryParams{incUADetails} = 1 if $$refWinReport->chReportOptIncUADetails->Checked();
+		$queryParams{incWeekdays}  = 1 if $$refWinReport->chReportOptIncWeekday->Checked();
+		my $selOutputDTFormat      = $$refWinReport->cbOutputDTFormat->GetCurSel();
+		$queryParams{localTZ}      = $$refWinConfig->cbLocalTZ->GetString($$refWinConfig->cbLocalTZ->GetCurSel());
+		$queryParams{language}     = $$refWinConfig->cbDefaultLang->GetString($$refWinConfig->cbDefaultLang->GetCurSel());
+		($queryParams{outPattern}, $queryParams{outTZ}) = (&infoDTFormat($$refWinReport->cbOutputDTFormat->GetString($selOutputDTFormat)))[1,3];
+		# Update Saved Queries database (used indicator)
+		&updateSavedQueriesUsed($queryParams{query}, $refWinLASavedQueries, $refWinConfig, $refWin, $refSTR);
+		# Save query params and options as JSON
+		my $destDir = $queryParams{dbFile};
+		while (chop($destDir) ne "\\") { } # Dir only
+		my $procID  = time;
+		my $jsonObj = JSON->new;
+		my $jsonText = $jsonObj->encode(\%queryParams);
+		if (open(my $json, '>:encoding(cp1252)', "$destDir\\CurrentQueryParams-" . $procID .'.json')) {
+			print $json $jsonText;
+			close($json);
+		}
+		# Start Query Database Process
+		my $command = 'XL-Parser-process ' . "LADB-Query $procID \"$PROGDIR\" \"$destDir\" \"$USERDIR\"";
+		Win32::Process::Create(my $processObj, $PROGDIR .'\XL-Parser-process.exe', $command, 0, NORMAL_PRIORITY_CLASS, $PROGDIR);
+		$$refWin->Enable();
+		$$refWin->BringWindowToTop();
+		$$refWin->tfLAQuery->BringWindowToTop();
+  } else {
+    $$refWin->tfLAQueryValidHidden->Text(2);
+    Win32::GUI::MessageBox($$refWin, $msg, "$$refSTR{'Test'} $$refSTR{'Query'}", 0x40010);
   }
-  # Start Query Database Process
-  my $command = 'XL-Parser-process ' . "LADB-Query $procID \"$PROGDIR\" \"$destDir\" \"$USERDIR\"";
-  Win32::Process::Create(my $processObj, $PROGDIR .'\XL-Parser-process.exe', $command, 0, NORMAL_PRIORITY_CLASS, $PROGDIR);
-  $$refWin->Enable();
-  $$refWin->BringWindowToTop();
-	$$refWin->tfLAQuery->BringWindowToTop();
   
 }  #--- End queryLADB
+
+#--------------------------#
+sub validLABDQuery
+#--------------------------#
+{
+	my ($refWin, $refSTR) = @_;
+  # A SQL Query must be set or selected
+  if (!$$refWin->tfLAQuery->Text()) { return(0, $$refSTR{'setSQLQuery'}); }
+  # Test query
+	my $query = $$refWin->tfLAQuery->Text();
+  if (my $dbFile = $$refWin->tfInput->Text()) {
+    if ($query =~ /SELECT/ and $query =~ /FROM/) {
+      $dbFile = encode('utf8', $dbFile);
+      my $dsn = "DBI:SQLite:dbname=$dbFile";
+      if (my $dbh = DBI->connect($dsn, undef, undef, { RaiseError => 1, PrintError => 0, PrintWarn  => 1 })) {
+        eval    { my $sth = $dbh->prepare($query); };
+        if ($@) { return(0, $$refSTR{'errQuery'} . ': ' . (split(/ at /, $@))[0]); } # Error in query
+				else		{ return(1, undef); 																							 } # Query OK
+      } else { return(0, $$refSTR{'errorConnectDB'}); } # Cannot connect to DB
+    } else { return(0, $$refSTR{'errQuery'}); } # Query incomplete
+  } else { return(0, $$refSTR{'noFile'}); }
+  
+}   #--- End validLABDQuery
 
 #--------------------------#
 sub updateSavedQueriesUsed
@@ -637,9 +665,9 @@ sub updateSavedQueriesUsed
       # Database: table = QUERIES, Fields = name, cat, query, used, time
       my $sth = $dbh->prepare('UPDATE QUERIES SET used = ? WHERE cat = ? and name = ?');
       my $rv  = $sth->execute($usedValue, $queryCat, $queryName);
-      Win32::GUI::MessageBox($$refWin, $$refSTR{'errUpdatingDB'}.': '.$DBI::errstr, $$refSTR{'error'}, 0x40010) if $rv < 0;
+      Win32::GUI::MessageBox($$refWin, $$refSTR{'errUpdatingDB'}.': '.$DBI::errstr, $$refSTR{'Error'}, 0x40010) if $rv < 0;
       $dbh->disconnect();
-    } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'error'}, 0x40010); }
+    } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'Error'}, 0x40010); }
   }
 
 }  #--- End updateSavedQueriesUsed
@@ -739,7 +767,7 @@ sub listValFilterFieldDB
     elsif ($field eq $$refSTR{'LFReferer'}   ) { $all = $dbhLog->selectall_arrayref('SELECT DISTINCT referer FROM LOG ORDER BY referer ASC');             }
     elsif ($field eq $$refSTR{'LFUA'}        ) { $all = $dbhLog->selectall_arrayref('SELECT DISTINCT useragent FROM LOG ORDER BY useragent ASC');         }
     elsif ($field eq $$refSTR{'isp'}         ) { $all = $dbhLog->selectall_arrayref('SELECT DISTINCT isp FROM IP ORDER BY isp ASC');                      }
-    elsif ($field eq $$refSTR{'GeoIPDB'}     ) { $all = $dbhLog->selectall_arrayref('SELECT DISTINCT geoIP FROM IP ORDER BY geoIP ASC');                  }
+    elsif ($field eq $$refSTR{'GeoIP'}			 ) { $all = $dbhLog->selectall_arrayref('SELECT DISTINCT geoIP FROM IP ORDER BY geoIP ASC');                  }
     elsif ($field eq $$refSTR{'LFUA-t'}      ) { $all = $dbhLog->selectall_arrayref('SELECT DISTINCT type FROM UA ORDER BY type ASC');                    }
     elsif ($field eq $$refSTR{'LFUA-os'}     ) { $all = $dbhLog->selectall_arrayref('SELECT DISTINCT os FROM UA ORDER BY os ASC');                        }
     elsif ($field eq $$refSTR{'LFUA-b'}      ) { $all = $dbhLog->selectall_arrayref('SELECT DISTINCT browser FROM UA ORDER BY browser ASC');              }
@@ -751,7 +779,7 @@ sub listValFilterFieldDB
     }
     $dbhLog->disconnect();
     return(\@listVal);
-  } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'error'}, 0x40010); }
+  } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'Error'}, 0x40010); }
   
 }  #--- End listValFilterFieldDB
 
@@ -794,7 +822,7 @@ sub loadLFDB
       my $sth;
       eval { $sth = $dbh->table_info(undef, undef, '%', 'TABLE'); };
       if ($@) {
-        Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'Error'}, 0x40010);
         return(0);
       }
       my @info = $sth->fetchrow_array;
@@ -818,8 +846,8 @@ sub loadLFDB
         $$refWinLFDB->gridLF->AutoSizeColumns();
         $dbh->disconnect();
         return(1);
-      } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'error'}, 0x40010); }
-    } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorDB'}, $$refSTR{'error'}, 0x40010); }
+      } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'Error'}, 0x40010); }
+    } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorDB'}, $$refSTR{'Error'}, 0x40010); }
   }
   return(0);
 
@@ -919,7 +947,7 @@ sub loadLAFilterSetDB
       my $sth;
       eval { $sth = $dbh->table_info(undef, undef, '%', 'TABLE'); };
       if ($@) {
-        Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'Error'}, 0x40010);
         return(0);
       }
       my $refAllRows = $sth->fetchall_arrayref();
@@ -951,8 +979,8 @@ sub loadLAFilterSetDB
           }
         }
         $dbh->disconnect();
-      } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'error'}, 0x40010); return(0); }
-    } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorDB'}, $$refSTR{'error'}, 0x40010); return(0); }
+      } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'Error'}, 0x40010); return(0); }
+    } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorDB'}, $$refSTR{'Error'}, 0x40010); return(0); }
   }
   # Browse the filters directory, parse json file and add new filter if not exist
   my @dirParts = split(/\\/, $LAFilterSetDBFile);
@@ -1168,7 +1196,7 @@ sub loadLAFiltersDB
       my $sth;
       eval { $sth = $dbh->table_info(undef, undef, '%', 'TABLE'); };
       if ($@) {
-        Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'Error'}, 0x40010);
         return(0);
       }
       my $refAllRows = $sth->fetchall_arrayref();
@@ -1204,8 +1232,8 @@ sub loadLAFiltersDB
         }
       }
       $dbh->disconnect();
-    } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'error'}, 0x40010); }
-  } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorDB'}, $$refSTR{'error'}, 0x40010); }
+    } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'Error'}, 0x40010); }
+  } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorDB'}, $$refSTR{'Error'}, 0x40010); }
   return(0);
 
 }  #--- End loadLAFiltersDB
@@ -1370,7 +1398,7 @@ sub getSelFilterSets
           # Filter by ISP or GeoIP
           } elsif ($selFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $$refSTR{'isp'}) {
             $filterISP = 1;
-          } elsif ($selFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $$refSTR{'GeoIPDB'}) {
+          } elsif ($selFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $$refSTR{'GeoIP'}) {
             $filterGeoIP = 1;
           # Filter by useragent details
           } elsif ($selFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $$refSTR{'LFUA-t'}  or
@@ -1438,7 +1466,7 @@ sub filtersAsSQLStr
             $partSQLStr .= 'datetimeInt ';
           } else {
             if ($$refFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $$refSTR{'isp'} or
-                $$refFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $$refSTR{'GeoIPDB'}) {
+                $$refFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $$refSTR{'GeoIP'}) {
               $partSQLStr .= 'remoteIP IN (SELECT ip FROM IP WHERE ';
               $partSQLStr .= $$refFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field}.' ';
             } elsif ($$refFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $$refSTR{'LFUA-t'}  or
@@ -1525,7 +1553,7 @@ sub filtersAsSQLStr
           }
         }
         if ($$refFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $$refSTR{'isp'}     or
-            $$refFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $$refSTR{'GeoIPDB'} or
+            $$refFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $$refSTR{'GeoIP'} 	or
             $$refFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $$refSTR{'LFUA-t'}  or
             $$refFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $$refSTR{'LFUA-os'} or
             $$refFilterSets{$filterSetCat}{$filterSetName}{FILTERS}{$index}{field} eq $$refSTR{'LFUA-b'}  or
@@ -1558,7 +1586,7 @@ sub loadSavedQueriesDB
       my $sth;
       eval { $sth = $dbh->table_info(undef, undef, '%', 'TABLE'); };
       if ($@) {
-        Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'error'}, 0x40010);
+        Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'Error'}, 0x40010);
         return(0);
       }
       my @info = $sth->fetchrow_array;
@@ -1593,7 +1621,7 @@ sub loadSavedQueriesDB
         return(1);
       }
       $dbh->disconnect();
-    } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'error'}, 0x40010); }
+    } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errorConnectDB'}.': '.$DBI::errstr, $$refSTR{'Error'}, 0x40010); }
   } else { Win32::GUI::MessageBox($$refWin, $$refSTR{'errLoadingDB'}, $$refSTR{'errorDB'}, 0x40010); }
   return(0);
 
