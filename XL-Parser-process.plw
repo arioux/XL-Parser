@@ -6,8 +6,8 @@
 # SourceForge           : https://sourceforge.net/p/xl-parser
 # GitHub                : https://github.com/arioux/XL-Parser
 # Creation              : 2016-07-15
-# Modified              : 2019-02-17
-my $VERSION             = '1.3';
+# Modified              : 2019-02-18
+my $VERSION             = '1.3.1';
 # Author                : Alain Rioux (admin@le-tools.com)
 #
 # Copyright (C) 2016-2019 Alain Rioux (le-tools.com)
@@ -4007,7 +4007,7 @@ sub extractSOFiles
       # Thread 'die' signal handler
       $SIG{__DIE__} = sub {
         return if $_ and $_[0] =~ /Invalid version format/;
-        return if $_ and $_->isa('GeoIP2::Error');
+        return if $_[0] and ($_[0]->isa('GeoIP2::Error::Generic') or $_[0]->isa('GeoIP2::Error::IPAddressNotFound'));
         die if $_ and $_[0] =~ /Negative length/ and $_[0] =~ /IO\/Handle.pm/;
         my $errMsg = (split(/ at /, $_[0]))[0];
         $errMsg =~ s/[\t\r\n]/ /g;
@@ -9224,7 +9224,7 @@ sub SA_ResIPs_Click
       };
       # Thread 'die' signal handler
       $SIG{__DIE__} = sub {
-        return if $_ and $_->isa('GeoIP2::Error');
+        return if $_[0] and ($_[0]->isa('GeoIP2::Error::Generic') or $_[0]->isa('GeoIP2::Error::IPAddressNotFound'));
         my $errMsg = (split(/ at /, $_[0]))[0];
         $errMsg =~ s/[\t\r\n]/ /g;
         # Finish statement handle and disconnect database
@@ -9623,7 +9623,7 @@ sub createLADB
       };
       # Thread 'die' signal handler
       $SIG{__DIE__} = sub {
-        return if $_ and $_->isa('GeoIP2::Error');
+        return if $_[0] and ($_[0]->isa('GeoIP2::Error::Generic') or $_[0]->isa('GeoIP2::Error::IPAddressNotFound'));
         die @_ if $_ and $_[0] =~ /Parse\/HTTP\/UserAgent/;
         my $errMsg = (split(/ at /, $_[0]))[0];
         $errMsg =~ s/[\t\r\n]/ /g;
@@ -10299,7 +10299,7 @@ sub updateLADB
       };
       # Thread 'die' signal handler
       $SIG{__DIE__} = sub {
-        return if $_ and $_->isa('GeoIP2::Error');
+        return if $_[0] and ($_[0]->isa('GeoIP2::Error::Generic') or $_[0]->isa('GeoIP2::Error::IPAddressNotFound'));
         die @_ if $_ and $_[0] =~ /Parse\/HTTP\/UserAgent/;
         my $errMsg = (split(/ at /, $_[0]))[0];
         $errMsg =~ s/[\t\r\n]/ /g;
