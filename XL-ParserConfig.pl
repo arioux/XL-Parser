@@ -6,7 +6,7 @@
 # SourceForge					: https://sourceforge.net/p/xl-parser
 # GitHub							: https://github.com/arioux/XL-Parser
 # Creation						: 2016-07-15
-# Modified						: 2019-02-17
+# Modified						: 2019-02-22
 # Author							: Alain Rioux (admin@le-tools.com)
 #
 # Copyright (C) 2016-2019 Alain Rioux (le-tools.com)
@@ -624,7 +624,7 @@ sub downloadDB
   } else { $errorMsg = "$$refSTR{'errorDownload'} $dbStr..."; }
   if ($errorMsg) {
     # Turn off progress bar
-    $refCurrWin->ChangeCursor($$refARROW);
+    $$refCurrWin->ChangeCursor($$refARROW);
     $$refWinPb->lblPbCurr->Text('');
     $$refWinPb->lblCount->Text('');
     $$refWinPb->pbWinPb->SetPos(0);
