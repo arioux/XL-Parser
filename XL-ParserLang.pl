@@ -6,7 +6,7 @@
 # SourceForge				: https://sourceforge.net/p/xl-parser
 # GitHub						: https://github.com/arioux/XL-Parser
 # Creation          : 2016-07-15
-# Modified          : 2019-02-17
+# Modified          : 2019-03-02
 # Author            : Alain Rioux (admin@le-tools.com)
 #
 # Copyright (C) 2016-2019 Alain Rioux (le-tools.com)
@@ -188,6 +188,7 @@ sub loadDefaultStr
   $$refSTR{'warnLookup'}      = 'Nslookup requires an active internet connection. Based on the number of results, it might take a while. You should use this with caution.';
   $$refSTR{'dbExists'}        = 'Database exists in the destination folder, replace it';
   $$refSTR{'errDBFilePath'}   = 'File does not match the database';
+  $$refSTR{'errDTFnotExist'}  = 'Datetime format does not exist.';
   # Main Window
   $$refSTR{'rbInputDir'}         = 'Dir';
   $$refSTR{'chInputDirRecurse'}  = 'Subfolders';

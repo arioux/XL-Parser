@@ -6,7 +6,7 @@
 # SourceForge					: https://sourceforge.net/p/xl-parser
 # GitHub							: https://github.com/arioux/XL-Parser
 # Creation						: 2016-07-15
-# Modified						: 2019-02-22
+# Modified						: 2019-03-02
 # Author							: Alain Rioux (admin@le-tools.com)
 #
 # Copyright (C) 2016-2019 Alain Rioux (le-tools.com)
@@ -496,14 +496,12 @@ sub downloadDB
 							$$refConfig{'DT_DB_FILE'} = $localFile;
 							&saveConfig($refConfig, $CONFIG_FILE);
 							# Load the Datetime database
-							&loadDTDB($refWinDTDB, $refWinConfig, $refCurrWin, $refSTR);
+							&createWinDTDB(1) if !$$refWinDTDB;
+							&loadDTDB;
 							&cbInputDTFormatAddITems();
-							$$refWin->cbInputDTFormat->SetCurSel(0);
+							$$refWinLFObj->cbLFObjDT->SetCurSel(0);
+							$$refWin->cbSplitTimeFormat->SetCurSel(0);
 							&cbOutputDTFormatAddITems();
-							$$refWin->cbOutputDTFormat->SetCurSel(0);
-							# Default output format
-							if (exists($$refConfig{'DEFAULT_OUTPUT'})) { $$refWinDTDB->cbDefaultOutput->SetCurSel($$refConfig{'DEFAULT_OUTPUT'}); }
-							else                                       { $$refWinDTDB->cbDefaultOutput->SetCurSel(0); }
 						} else { $errorMsg = "$$refSTR{'errorMsg'}: $$refSTR{'invalidFile'}"; }
 					} else { $errorMsg = "$$refSTR{'errorMsg'}: $UnzipError"; }
 				}
@@ -569,7 +567,7 @@ sub downloadDB
 					# Uncompress ResTLDDB ZIP
 					$TOTAL_SIZE = 0;
 					if (unzip $ResTLDDB_ZIP => $localFile, BinModeOut => 1) {
-						if (&validSQLiteDB($localFile, 'ResTLD')) {
+						if (&validSQLiteDB($localFile, 'DATA')) {
 							unlink $ResTLDDB_ZIP;
 							$$refWinConfig->tfResTLDDB->Text($localFile);
 							$$refConfig{'RES_TLD_DB_FILE'} = $localFile;

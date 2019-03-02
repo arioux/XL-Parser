@@ -7,8 +7,8 @@
 # GitHub      : https://github.com/arioux/XL-Parser
 # Description : Part of the XL-Toolkit, XL-Parser provides a bunch of functions for data extraction and analysis.
 # Creation    : 2016-07-15
-# Modified    : 2019-02-22
-my $VERSION   = '1.3.2';
+# Modified    : 2019-03-02
+my $VERSION   = '1.3.3';
 # Author      : Alain Rioux (admin@le-tools.com)
 #
 # Copyright (C) 2016-2019 Alain Rioux (le-tools.com)
@@ -7915,70 +7915,80 @@ sub isLFObjReady
       my $pattern = $winLFObj->tfLFObjPattern->Text();
       if ($pattern) {
         $winLFObj->tfLFObjRegex->Enable();
-        # Regex provided ?
-        my $regex = $winLFObj->tfLFObjRegex->Text();
-        if ($regex) {
-          my ($statusRegex, $msg) = &validRegex($regex);
-          # Warning
-          if      ($statusRegex == 2) {
-            $winLFObj->lblLFObjRegexWarn->Show();
-            $winLFObj->lblLFObjRegexOk->Hide();
-            $winLFObj->lblLFObjRegexErr->Hide();
-          # Error
-          } elsif ($statusRegex == 1) {
-            $winLFObj->lblLFObjRegexErr->Show();
-            $winLFObj->lblLFObjRegexOk->Hide();
-            $winLFObj->lblLFObjRegexWarn->Hide();
-            $nextStep = $STR{'errRegex'};
-          # Ok
-          } else {
-            $winLFObj->lblLFObjRegexOk->Show();
-            $winLFObj->lblLFObjRegexErr->Hide();
-            $winLFObj->lblLFObjRegexWarn->Hide();
+        if ($pattern =~ /datetime\(([^\)]+)\)/) {
+          my $datetime  = $1;
+          $datetime     =~ s/\%20/ /g;
+          my @matchesDT = &findInputDTFormat($datetime);
+          if (scalar(@matchesDT) > 1) {
+            # Regex provided ?
+            my $regex = $winLFObj->tfLFObjRegex->Text();
+            if ($regex) {
+              my ($statusRegex, $msg) = &validRegex($regex);
+              # Warning
+              if      ($statusRegex == 2) {
+                $winLFObj->lblLFObjRegexWarn->Show();
+                $winLFObj->lblLFObjRegexOk->Hide();
+                $winLFObj->lblLFObjRegexErr->Hide();
+              # Error
+              } elsif ($statusRegex == 1) {
+                $winLFObj->lblLFObjRegexErr->Show();
+                $winLFObj->lblLFObjRegexOk->Hide();
+                $winLFObj->lblLFObjRegexWarn->Hide();
+                $nextStep = $STR{'errRegex'};
+              # Ok
+              } else {
+                $winLFObj->lblLFObjRegexOk->Show();
+                $winLFObj->lblLFObjRegexErr->Hide();
+                $winLFObj->lblLFObjRegexWarn->Hide();
+              }
+            } else {
+              $winLFObj->lblLFObjRegexOk->Hide();
+              $winLFObj->lblLFObjRegexErr->Hide();
+              $winLFObj->lblLFObjRegexWarn->Hide();
+              $nextStep = $STR{'errRegex'};
+            }
+            # Test and apply regex
+            if (!$nextStep) {
+              my %expr = ('expr' => '^'.$regex, 'regex' => 1);
+              my ($result, $nbrRes, $refListRes) = &textExprAll($sample, \%expr, \%STR);
+              if ($result) {
+                $winLFObj->gridLFObjParsedData->DeleteNonFixedRows();
+                my @listRes = split(/\t/, $$refListRes[0]);
+                shift(@listRes);
+                my @LFFields = split(/ /, $pattern);
+                my %fieldOrder;
+                my $i = 0;
+                foreach my $field (@LFFields) {
+                  if    ($field =~ /remoteIP/     ) { $fieldOrder{remoteIP}      = $i++; }
+                  elsif ($field =~ /datetime/     ) { $fieldOrder{datetime}      = $i++; }
+                  elsif ($field =~ /http_method/  ) { $fieldOrder{http_method}   = $i++; }
+                  elsif ($field =~ /http_request/ ) { $fieldOrder{http_request}  = $i++; }
+                  elsif ($field =~ /http_params/  ) { $fieldOrder{http_params}   = $i++; }
+                  elsif ($field =~ /http_protocol/) { $fieldOrder{http_protocol} = $i++; }
+                  elsif ($field =~ /http_status/  ) { $fieldOrder{http_status}   = $i++; }
+                  elsif ($field =~ /size/         ) { $fieldOrder{size}          = $i++; }
+                  elsif ($field =~ /referer/      ) { $fieldOrder{referer}       = $i++; }
+                  elsif ($field =~ /useragent/    ) { $fieldOrder{useragent}     = $i++; }
+                }
+                $i = 1;
+                $winLFObj->gridLFObjParsedData->SetRows(scalar(keys %fieldOrder)+1);
+                foreach my $fName (sort { $fieldOrder{$a} <=> $fieldOrder{$b}} keys %fieldOrder) {
+                  $winLFObj->gridLFObjParsedData->SetCellText($i, 0, $fName);
+                  $winLFObj->gridLFObjParsedData->SetCellText($i, 1, $listRes[$i-1]);
+                  $i++;
+                }
+              } else { $winLFObj->gridLFObjParsedData->DeleteNonFixedRows(); }
+              $winLFObj->gridLFObjParsedData->AutoSizeColumns();
+              $winLFObj->gridLFObjParsedData->ExpandLastColumn();
+              $winLFObj->gridLFObjParsedData->Refresh();
+              # Test pattern minimum field
+              $nextStep = $STR{'providePatternMin'} if ($pattern !~ /remoteIP/     or $pattern !~ /datetime/ or $pattern !~ /http_method/ or
+                                                        $pattern !~ /http_request/ or $pattern !~ /http_status/);
+            }
+          } else { # Datetime format doesn't exist in Datetime database
+            $winLFObj->tfLFObjRegex->Disable();
+            $nextStep = $STR{'errDTFnotExist'}
           }
-        } else {
-          $winLFObj->lblLFObjRegexOk->Hide();
-          $winLFObj->lblLFObjRegexErr->Hide();
-          $winLFObj->lblLFObjRegexWarn->Hide();
-          $nextStep = $STR{'errRegex'};
-        }
-        # Test and apply regex
-        if (!$nextStep) {
-          my %expr = ('expr' => '^'.$regex, 'regex' => 1);
-          my ($result, $nbrRes, $refListRes) = &textExprAll($sample, \%expr, \%STR);
-          if ($result) {
-            $winLFObj->gridLFObjParsedData->DeleteNonFixedRows();
-            my @listRes = split(/\t/, $$refListRes[0]);
-            shift(@listRes);
-            my @LFFields = split(/ /, $pattern);
-            my %fieldOrder;
-            my $i = 0;
-            foreach my $field (@LFFields) {
-              if    ($field =~ /remoteIP/     ) { $fieldOrder{remoteIP}      = $i++; }
-              elsif ($field =~ /datetime/     ) { $fieldOrder{datetime}      = $i++; }
-              elsif ($field =~ /http_method/  ) { $fieldOrder{http_method}   = $i++; }
-              elsif ($field =~ /http_request/ ) { $fieldOrder{http_request}  = $i++; }
-              elsif ($field =~ /http_params/  ) { $fieldOrder{http_params}   = $i++; }
-              elsif ($field =~ /http_protocol/) { $fieldOrder{http_protocol} = $i++; }
-              elsif ($field =~ /http_status/  ) { $fieldOrder{http_status}   = $i++; }
-              elsif ($field =~ /size/         ) { $fieldOrder{size}          = $i++; }
-              elsif ($field =~ /referer/      ) { $fieldOrder{referer}       = $i++; }
-              elsif ($field =~ /useragent/    ) { $fieldOrder{useragent}     = $i++; }
-            }
-            $i = 1;
-            $winLFObj->gridLFObjParsedData->SetRows(scalar(keys %fieldOrder)+1);
-            foreach my $fName (sort { $fieldOrder{$a} <=> $fieldOrder{$b}} keys %fieldOrder) {
-              $winLFObj->gridLFObjParsedData->SetCellText($i, 0, $fName);
-              $winLFObj->gridLFObjParsedData->SetCellText($i, 1, $listRes[$i-1]);
-              $i++;
-            }
-          } else { $winLFObj->gridLFObjParsedData->DeleteNonFixedRows(); }
-          $winLFObj->gridLFObjParsedData->AutoSizeColumns();
-          $winLFObj->gridLFObjParsedData->ExpandLastColumn();
-          $winLFObj->gridLFObjParsedData->Refresh();
-          # Test pattern minimum field
-          $nextStep = $STR{'providePatternMin'} if ($pattern !~ /remoteIP/     or $pattern !~ /datetime/ or $pattern !~ /http_method/ or
-                                                    $pattern !~ /http_request/ or $pattern !~ /http_status/);
         }
       } else { # No pattern
         $winLFObj->tfLFObjRegex->Disable();
@@ -11890,11 +11900,11 @@ sub findInputDTFormat
   my $item = shift;
   # Guess format
   for (my $i = 1; $i < $winDTDB->gridDT->GetRows(); $i++) {
-    my $regex = $winDTDB->gridDT->GetCellText($i, 2);
-    if ($item =~ /($regex)/i) {
+    my $currFormat = $winDTDB->gridDT->GetCellText($i, 0);
+    if ($currFormat eq $item) {
       my $pattern = $winDTDB->gridDT->GetCellText($i, 1);
       # Format
-      my $partItem = $1 =~ s/ +/ /gr;
+      my $partItem = $item =~ s/ +/ /gr;
       my $strp = DateTime::Format::Strptime->new(pattern => $pattern, zone_map => \%ZONE_MAP);
       if (my $dt = $strp->parse_datetime($partItem)) {
         my $timezone;
@@ -12844,6 +12854,7 @@ sub cbInputDTFormatAddITems
   }
   # Update the combobox
   if (scalar(@inputFormats)) {
+    $win->cbSplitTimeFormat->ResetContent();
     $win->cbSplitTimeFormat->Add($STR{'selectDTFormat'}.'...');
     $winLFObj->cbLFObjDT->Add($STR{'selectDTFormat'}.'...');
     foreach (@inputFormats) {
@@ -13623,7 +13634,7 @@ sub firstStart
         $$refWinCW->lblDLGeoIPDBDone->Show();
       } else {
         $$refWinCW->lblDLGeoIPDB->Text($STR{'Downloading'}.' '.$STR{'GeoIPDB'});
-        ($status, $return) = &downloadDB($refWinCW, 'GeoIP', $STR{'GeoIPDB'}, "$dir\\GeoLite2-City.mmdb", 'Maxmind', \$HOURGLASS,
+        ($status, $return) = &downloadDB($refWinCW, 'GeoIP', $STR{'GeoIPDB'}, $dir, 'Maxmind', \$HOURGLASS,
                                          \$ARROW, \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj,
                                          \$winPb, \$win, \%STR);
         if ($status) { $$refWinCW->lblDLGeoIPDBDone->Show(); } # Success
@@ -15390,7 +15401,7 @@ sub btnResTLDDBUpt_Click
       my ($status, $return) = &downloadDB(\$winConfig, 'ResTLD', $STR{'ResTLDDB'}, "$USERDIR\\Resolve TLD.db", 'le-tools.com',
                                           \$HOURGLASS, \$ARROW, \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj,
                                           \$winPb, \$win, \%STR);
-      if ($status) { Win32::GUI::MessageBox($winConfig, "$STR{'IINDB'} $STR{'HasBeenUpdated'}", "XL-Parser $VERSION", 0x40040); }
+      if ($status) { Win32::GUI::MessageBox($winConfig, "$STR{'ResTLDDB'} $STR{'HasBeenUpdated'}", "XL-Parser $VERSION", 0x40040); }
       else         { Win32::GUI::MessageBox($winConfig, $return, $STR{'Error'}, 0x40010); }
       $winConfig->BringWindowToTop();
     });
