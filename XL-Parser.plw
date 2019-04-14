@@ -7,8 +7,8 @@
 # GitHub      : https://github.com/arioux/XL-Parser
 # Description : Part of the XL-Toolkit, XL-Parser provides a bunch of functions for data extraction and analysis.
 # Creation    : 2016-07-15
-# Modified    : 2019-03-02
-my $VERSION   = '1.3.3';
+# Modified    : 2019-04-14
+my $VERSION   = '1.3.4';
 # Author      : Alain Rioux (admin@le-tools.com)
 #
 # Copyright (C) 2016-2019 Alain Rioux (le-tools.com)
@@ -7279,6 +7279,7 @@ sub btnLFAdd_Click
   $winLFObj->lblLFObjRegexOk->Hide();
   $winLFObj->lblLFObjRegexErr->Hide();
   $winLFObj->lblLFObjRegexWarn->Hide();
+  $winLFObj->chLFObjHasSpaces->Checked(0);
   $winLFObj->tfLFObjRegex->Text('');
   $winLFObj->chLFObjRegexAuto->Checked(1);
   $winLFObj->gridLFObjParsedData->DeleteNonFixedRows();
@@ -7310,6 +7311,8 @@ sub btnLFEdit_Click
   $winLFObj->tfLFObjPattern->Text($winLFDB->gridLF->GetCellText($selRow, 2));
   $winLFObj->tfLFObjRegex->Text($winLFDB->gridLF->GetCellText($selRow, 3));
   # Update controls
+  if ($winLFObj->tfLFObjPattern->Text() =~ /-s\"/) { $winLFObj->chLFObjHasSpaces->Checked(1); }
+  else                                             { $winLFObj->chLFObjHasSpaces->Checked(0); }
   $winLFObj->btnLFObjFromInput->Enable();
   $winLFObj->btnLFPatternFromIISLog->Enable();
   $winLFObj->btnLFObjAdd->Hide();
@@ -7623,7 +7626,8 @@ sub btnLFObjPatternInsert_Click
   my @LFObjPatternStr = ('remoteIP', 'datetime', 'http_method', 'http_request', 'http_params', 'http_protocol',
                          'http_status', 'size', 'referer', 'useragent', 'other');
   # Add a space before each new pattern
-  $winLFObj->tfLFObjPattern->Append(' ') if $winLFObj->tfLFObjPattern->Text;
+  my $currPattern = $winLFObj->tfLFObjPattern->Text();
+  $winLFObj->tfLFObjPattern->Append(' ') if $currPattern and $currPattern =~ /[a-zA-Z\"]$/; # Add a space
   # Datetime
   if ($LFObjPattern == 1) {
     my $DTFormatSample = $winLFObj->cbLFObjDT->GetString($winLFObj->cbLFObjDT->GetCurSel());
@@ -7870,7 +7874,7 @@ sub chLFObjRegexAuto_Click
 {
   my $pattern   = $winLFObj->tfLFObjPattern->Text();
   if ($pattern and $winLFObj->chLFObjRegexAuto->Checked()) {
-    my $regex = patternLFRE($pattern);
+    my $regex = &patternLFRE($pattern);
     $winLFObj->tfLFObjRegex->Text($regex);
   }
   &isLFObjReady(0);
@@ -12162,6 +12166,7 @@ sub createWinDTObj
                                  '%M - ' . $STR{'Minutes'}       . ' (00-59)'    ,
                                  '%m - ' . $STR{'Month'}         . ' (01-12)'    ,
                                  '%p - ' . $STR{'AMorPM'}                        ,
+                                 '%P - ' . $STR{'AMorPM'}                        ,
                                  '%R - ' . $STR{'EquivalentTo'}  . ' %H:%M'      ,
                                  '%r - ' . $STR{'EquivalentTo'}  . ' %I:%M:%S %p',
                                  '%S - ' . $STR{'Seconds'}       . ' (00-60)'    ,
@@ -12355,9 +12360,8 @@ sub btnDTObjPatternInsert_Click
 {
   # Local variables
   my $patternObjSel = $winDTObj->cbDTObjPattern->GetCurSel();
-  my @patterns = ('%B', '%b', '%D', '%d', '%e', '%F', '%H', '%I', '%M', '%m',
-                  '%p', '%R', '%r', '%S', '%T', '%v', '%w', '%Y', '%y', '%Z',
-                  '%z', );
+  my @patterns = ('%B', '%b', '%D', '%d', '%e', '%F', '%H', '%I', '%M', '%m', '%p',
+                  '%P', '%R', '%r', '%S', '%T', '%v', '%w', '%Y', '%y', '%Z', '%z', );
   $winDTObj->tfDTObjPattern->Append($patterns[$patternObjSel]);
   &isDTObjReady(0);
 
@@ -12379,17 +12383,18 @@ sub patternDTRE
                   '%d' => '\d{2}', # day of the month as a decimal number (01-31)
                   '%e' => '\d{1,2}', # day of the month as a decimal number (1-31); single digits are preceded by a blank.
                   '%F' => '\d{4}\-\d{2}\-\d{2}', # %Y-%m-%d
-                  '%H' => '\d{2}', # hour (24-hour clock) as a decimal number (00-23)
-                  '%I' => '\d{2}', # hour (12-hour clock) as a decimal number (01-12)
-                  '%j' => '\d{3}', # day of the year as a decimal number (001-366)
+                  '%H' => '\d{2}'  , # hour (24-hour clock) as a decimal number (00-23)
+                  '%I' => '\d{1,2}', # hour (12-hour clock) as a decimal number (01-12)
+                  '%j' => '\d{3}'  , # day of the year as a decimal number (001-366)
                   '%k' => '\d{1,2}', # hour (24-hour clock) as a decimal number (0-23); single digits are preceded by a blank.
                   '%l' => '\d{1,2}', # hour (12-hour clock) as a decimal number (1-12); single digits are preceded by a blank.
-                  '%M' => '\d{2}', # minute as a decimal number (00-59)
+                  '%M' => '\d{2}'  , # minute as a decimal number (00-59)
                   '%m' => '\d{1,2}', # month as a decimal number (01-12)
                   '%n' => '\n', # newline
-                  '%p' => '[ap]\.?m\.?', # national representation of either "ante meridiem" (a.m.)  or "post meridiem" (p.m.)  as appropriate.
+                  '%p' => '[AP]\.?M\.?', # national representation of either "ante meridiem" (a.m.)  or "post meridiem" (p.m.)  as appropriate.
+                  '%P' => '[ap]\.?m\.?', # national representation of either "ante meridiem" (a.m.)  or "post meridiem" (p.m.)  as appropriate.
                   '%R' => '\d{2}:\d{2}', # %H:%M
-                  '%r' => '\d{1,2}:\d{2}:\d{2} [ap]\.?m\.?', # %I:%M:%S %p
+                  '%r' => '\d{1,2}:\d{2}:\d{2} [apAP]\.?[mM]\.?', # %I:%M:%S %p
                   '%S' => '\d{2}', # second as a decimal number (00-60)
                   '%s' => '\d{10,13}', # number of seconds since the Epoch
                   '%T' => '\d{2}:\d{2}:\d{2}', # %H:%M:%S
