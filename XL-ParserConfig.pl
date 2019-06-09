@@ -6,7 +6,7 @@
 # SourceForge					: https://sourceforge.net/p/xl-parser
 # GitHub							: https://github.com/arioux/XL-Parser
 # Creation						: 2016-07-15
-# Modified						: 2019-03-02
+# Modified						: 2019-06-09
 # Author							: Alain Rioux (admin@le-tools.com)
 #
 # Copyright (C) 2016-2019 Alain Rioux (le-tools.com)
@@ -399,9 +399,11 @@ sub checkUpdate
   # Compare local et remote file date
   my $strp2 = DateTime::Format::Strptime->new(pattern => '%a, %d %b %Y %T %Z');
   if (my $lastModifT = $strp2->parse_datetime($lastModifDate)) {
+		$localFileT->set_hour(0); $localFileT->set_minute(0); $localFileT->set_second(0);
+		$lastModifT->set_hour(0); $lastModifT->set_minute(0); $lastModifT->set_second(0);
     my $cmp = DateTime->compare($localFileT, $lastModifT);
-    if ($cmp > -1) { return(1, $return, $localFileT->ymd(), $lastModifT->ymd()); } # MACOUIDB is up to date 
-    else           { return(2, $return, $localFileT->ymd(), $lastModifT->ymd()); } # MACOUIDB is outdated
+    if ($cmp > -1) { return(1, $return, $localFileT->ymd(), $lastModifT->ymd()); } # Database is up to date 
+    else           { return(2, $return, $localFileT->ymd(), $lastModifT->ymd()); } # Database is outdated
   } else           { return(3, $return, undef             , undef             ); } # Connection error
 
 }  #--- End checkUpdate
