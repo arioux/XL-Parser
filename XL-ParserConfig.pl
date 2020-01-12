@@ -6,10 +6,10 @@
 # SourceForge					: https://sourceforge.net/p/xl-parser
 # GitHub							: https://github.com/arioux/XL-Parser
 # Creation						: 2016-07-15
-# Modified						: 2019-06-09
+# Modified						: 2020-01-12
 # Author							: Alain Rioux (admin@le-tools.com)
 #
-# Copyright (C) 2016-2019 Alain Rioux (le-tools.com)
+# Copyright (C) 2016-2020 Alain Rioux (le-tools.com)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -40,7 +40,6 @@ use Domain::PublicSuffix;
 my $URL_TOOL        = 'http://le-tools.com/XL-Parser.html#Download';           # Url of the tool
 my $URL_VER         = 'http://www.le-tools.com/download/XL-ParserVer.txt';     # Url of the version file
 my $MACOUIDB_URL    = 'http://standards-oui.ieee.org/oui.txt';                 # URL of the MAC OUI DB
-my $GEOIPDB_URL			= 'https://geolite.maxmind.com/download/geoip/database/GeoLite2-City.tar.gz'; # URL of the GeoIP DB
 my $IINDB_URL       = 'http://le-tools.com/download/XL-Tools/IIN.zip';         # URL of the IINDB
 my $TLDDB_URL       = 'https://publicsuffix.org/list/effective_tld_names.dat'; # URL of the TLD DB
 my $RESTLDDB_URL    = 'http://le-tools.com/download/XL-Tools/Resolve TLD.zip'; # URL of the Resolve TLD DB
@@ -115,10 +114,16 @@ sub loadConfig
   if (exists($$refConfig{'MACOUI_DB_FILE'}) and
       -f $$refConfig{'MACOUI_DB_FILE'})             { $$refWinConfig->tfMACOUIDB->Text($$refConfig{'MACOUI_DB_FILE'});                  }
   # GeoIPDB Database location
-  if (exists($$refConfig{'GEOIP_DB_AUTO_UPDATE'}))  { $$refWinConfig->chGeoIPDBAutoUpt->Checked($$refConfig{'GEOIP_DB_AUTO_UPDATE'});   }
-  else                                              { $$refWinConfig->chGeoIPDBAutoUpt->Checked(1);                                     } # Default is checked
   if (exists($$refConfig{'GEOIP_DB_FILE'}) and
       -f $$refConfig{'GEOIP_DB_FILE'})              { $$refWinConfig->tfGeoIPDB->Text($$refConfig{'GEOIP_DB_FILE'});                    }
+	else {
+		# Verify if database exists in a default directory
+    my $defaultPath = &findXLTKfile('GeoIPDB');
+    if (-f $defaultPath and &validGeoIPDB($defaultPath)) {
+			$$refConfig{'GEOIP_DB_FILE'} = $defaultPath;
+      $$refWinConfig->tfGeoIPDB->Text($defaultPath);
+    }
+	}
   # IIN Database location
   if (exists($$refConfig{'IIN_DB_FILE'}) and
       -f $$refConfig{'IIN_DB_FILE'})                { $$refWinConfig->tfIINDB->Text($$refConfig{'IIN_DB_FILE'});                        }
@@ -208,9 +213,6 @@ sub updateAll
   };
   sleep(1);
   &updateTool(    0, $VERSION, $refWinConfig, $refWin, $refSTR) if $$refConfig{'TOOL_AUTO_UPDATE'};	# Update Tool?
-	&updateDB(0, 'GeoIP', $$refSTR{'GeoIPDB'}, $$refWinConfig->tfGeoIPDB->Text(), 'Maxmind', 'GeoLite2-City.mmdb',
-						$USERDIR, $refHOURGLASS, $refARROW, $refConfig, $CONFIG_FILE, $refWinConfig, $refWinDTDB, $refWinLFDB,
-						$refWinLFObj, $refWinPb, $refWin, $refSTR) if $$refConfig{'GEOIP_DB_AUTO_UPDATE'};			# Update GeoIP ?
 	&updateDB(0, 'MACOUI', $$refSTR{'MACOUIDB'}, $$refWinConfig->tfMACOUIDB->Text(), 'ieee.org', 'oui.db', $USERDIR,
 						$refHOURGLASS, $refARROW, $refConfig, $CONFIG_FILE, $refWinConfig, $refWinDTDB, $refWinLFDB, $refWinLFObj,
 						$refWinPb, $refWin, $refSTR)							if $$refConfig{'MACOUI_DB_AUTO_UPDATE'};			# Update MAC OUI ?
@@ -289,16 +291,8 @@ sub updateDB
 	my ($confirm, $db, $dbStr, $localFile, $site, $filename, $USERDIR, $refHOURGLASS, $refARROW, $refConfig, $CONFIG_FILE,
 			$refWinConfig, $refWinDTDB, $refWinLFDB, $refWinLFObj, $refWinPb, $refWin, $refSTR) = @_;
   # if $confirm == 1, show message
-  # $db: MACOUI, GeoIP
-	if (!$localFile and $db eq 'GeoIP' and $localFile = &findXLTKfile('GeoIPDB')) {
-		$$refWinConfig->tfGeoIPDB->Text($localFile);
-		$$refConfig{'GEOIP_DB_FILE'} = $localFile;
-		&saveConfig($refConfig, $CONFIG_FILE);
-	}
-  $localFile = "$USERDIR\\$filename"		if !$localFile;  # Default location
 	my $url;
 	if		($db eq 'MACOUI') { $url = $MACOUIDB_URL; }
-	elsif ($db eq 'GeoIP'	) { $url = $GEOIPDB_URL; 	}
 	elsif ($db eq 'TLD'		) { $url = $TLDDB_URL; 		}
   # Check if update available or necessary
   my $refWinH = $refWin;
@@ -422,7 +416,6 @@ sub downloadDB
 	elsif ($db eq 'LF'		) { $url = $LFDB_URL;			}
 	elsif ($db eq 'TLD'		) { $url = $TLDDB_URL;		}
 	elsif ($db eq 'ResTLD') { $url = $RESTLDDB_URL; }
-	elsif ($db eq 'GeoIP'	) { $url = $GEOIPDB_URL; 	}
   # Start an agent
   my $ua = LWP::UserAgent->new;
   $ua->agent($$refConfig{'USERAGENT'});
@@ -577,37 +570,6 @@ sub downloadDB
 						} else { $errorMsg = "$$refSTR{'errorMsg'}: $$refSTR{'invalidFile'}"; }
 					} else { $errorMsg = "$$refSTR{'errorMsg'}: $UnzipError"; }
 				}
-      # Uncompress GeoIP downloaded file
-      } elsif ($db eq 'GeoIP') {
-        my $GeoIPGZIP = $localFile . '\GeoLite2-City.tar.gz';
-        if (open(GEOIPGZ,">$GeoIPGZIP")) {
-          binmode(GEOIPGZ);
-          print GEOIPGZ $downloadData;
-          close(GEOIPGZ);
-          # Uncompress GEOIP GZIP
-          $TOTAL_SIZE = 0;
-          my $tar   = Archive::Tar->new($GeoIPGZIP);
-          my @files = $tar->list_files;
-          my $db_file;
-          foreach my $file (@files) {
-            if ($file =~ /mmdb/) {
-              $db_file = (split(/\//, $file))[-1];
-              $tar->extract_file($file, "$localFile\\$db_file");
-            }
-          }
-          # Validate file
-          if (-e "$localFile\\$db_file" and &validGeoIPDB("$localFile\\$db_file")) {
-            unlink($GeoIPGZIP);
-            my $lastModifDate = $response->header('last-modified');
-						my $strp = DateTime::Format::Strptime->new(pattern => '%a, %d %b %Y %T %Z');
-            if ($lastModifDate and my $lastModifT = $strp->parse_datetime($lastModifDate)) { # Parse date
-              utime(time, $lastModifT->epoch, "$localFile\\$db_file"); # Change the last modified date of the db file
-            }
-            $$refWinConfig->tfGeoIPDB->Text("$localFile\\$db_file");
-            $$refConfig{'GEOIP_DB_FILE'} = "$localFile\\$db_file";
-            &saveConfig($refConfig, $CONFIG_FILE);
-          } else { $errorMsg = "$$refSTR{'errorMsg'}: $$refSTR{'invalidFile'}"; }
-        } else { $errorMsg = "$$refSTR{'errorMsg'}: $$refSTR{'errorUnzip'} $GeoIPGZIP"; }
       }
       $downloadData = undef;
       if (!$errorMsg) {
@@ -740,7 +702,6 @@ sub validGeoIPDB
   } else { return(0); }
   
 }  #--- End validGeoIPDB
-
 
 #--------------------------#
 sub createExprHistoDB

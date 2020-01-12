@@ -7,11 +7,11 @@
 # GitHub      : https://github.com/arioux/XL-Parser
 # Description : Part of the XL-Toolkit, XL-Parser provides a bunch of functions for data extraction and analysis.
 # Creation    : 2016-07-15
-# Modified    : 2019-06-09
-my $VERSION   = '1.3.5';
+# Modified    : 2020-01-12
+my $VERSION   = '1.3.6';
 # Author      : Alain Rioux (admin@le-tools.com)
 #
-# Copyright (C) 2016-2019 Alain Rioux (le-tools.com)
+# Copyright (C) 2016-2020 Alain Rioux (le-tools.com)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -1642,12 +1642,6 @@ $winConfig->AddButton(      -name         => 'btnGeoIPDB'            ,
                             -bitmap       => $fileOpenBmp            ,
                             -tip          => $STR{'selectDBFile'}    ,
                             -visible      => 0                       , );
-$winConfig->AddButton(      -name         => 'btnGeoIPDBUpt'         ,
-                            -size         => [ 22, 22]               ,
-                            -pos          => [707,133]               ,
-                            -bitmap       => $downloadBmp            ,
-                            -tip          => $STR{'downloadDB'}      ,
-                            -visible      => 0                       , );
 $winConfig->AddLabel(       -name         => 'lblGeoIPNotice'        ,
                             -size         => [630, 22]               ,
                             -pos          => [150,160]               ,
@@ -2094,7 +2088,7 @@ if (-T $CONFIG_FILE) {
   $THR_UPDATE = threads->create(sub {
     sleep(1);
     # Check update for tool and databases ?
-    if ($CONFIG{'TOOL_AUTO_UPDATE'} or $CONFIG{'MACOUI_DB_AUTO_UPDATE'} or $CONFIG{'GEOIP_DB_AUTO_UPDATE'}) {
+    if ($CONFIG{'TOOL_AUTO_UPDATE'} or $CONFIG{'MACOUI_DB_AUTO_UPDATE'}) {
       &updateAll($VERSION, $USERDIR, \$HOURGLASS, \$ARROW, \$winConfig, \%CONFIG, $CONFIG_FILE, \$winDTDB,
                  \$winLFDB, \$winLFObj, \$winPb, \$win, \%STR);
     }
@@ -13631,26 +13625,13 @@ sub firstStart
       # GeoIP Database
       $$refWinCW->lblDLGeoIPDB->Show();
       $defaultPath = &findXLTKfile('GeoIPDB');
-      if (-f $defaultPath and &validGeoIPDB($defaultPath)) { # Database exists in XL-Tools user dir, check if update available
+      if ($defaultPath and -e $defaultPath and &validGeoIPDB($defaultPath)) {
         $winConfig->tfGeoIPDB->Text($defaultPath);
-        $$refWinCW->lblDLGeoIPDB->Text($STR{'Updating'}.' '.$STR{'GeoIPDB'});
-        &updateDB(0, 'GeoIP', $STR{'GeoIPDB'}, $winConfig->tfGeoIPDB->Text(), 'Maxmind', 'GeoLite2-City.mmdb', $dir, \$HOURGLASS, \$ARROW,
-                  \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj, \$winPb, \$win, \%STR);
         $$refWinCW->lblDLGeoIPDBDone->Show();
       } else {
-        $$refWinCW->lblDLGeoIPDB->Text($STR{'Downloading'}.' '.$STR{'GeoIPDB'});
-        ($status, $return) = &downloadDB($refWinCW, 'GeoIP', $STR{'GeoIPDB'}, $dir, 'Maxmind', \$HOURGLASS,
-                                         \$ARROW, \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj,
-                                         \$winPb, \$win, \%STR);
-        if ($status) { $$refWinCW->lblDLGeoIPDBDone->Show(); } # Success
-        else { # Error
-          $$refWinCW->lblDLGeoIPDBError->Show();
-          Win32::GUI::MessageBox($$refWinCW, $return, $STR{'Error'}, 0x40010);
-        }
+        $$refWinCW->lblDLGeoIPDBError->Show();
+        Win32::GUI::MessageBox($$refWinCW, $return, $STR{'Error'}, 0x40010);
       }
-      $winConfig->chGeoIPDBAutoUpt->Checked(1); # Set auto update for GeoIP Database
-      $CONFIG{'GEOIP_DB_AUTO_UPDATE'} = 1;
-      &saveConfig(\%CONFIG, $CONFIG_FILE);
       # IINDB Database
       $$refWinCW->lblDLIINDB->Show();
       $defaultPath = "$ENV{'APPDATA'}\\XL-Toolkit\\XL-Tools\\IIN.db";
@@ -13870,6 +13851,8 @@ sub findXLTKfile
       $defPath = "$ENV{'APPDATA'}\\XL-Toolkit\\XL-Tools\\GeoLite2-City.mmdb";
     } elsif (-e "$ENV{'APPDATA'}\\XL-Toolkit\\XL-Whois\\GeoLite2-City.mmdb" ) { # In XL-Whois dir
       $defPath = "$ENV{'APPDATA'}\\XL-Toolkit\\XL-Whois\\GeoLite2-City.mmdb";
+    } elsif (-e "$ENV{'PROGRAMDATA'}\\Maxmind\\GeoIPUpdate\\GeoIP\\GeoLite2-City.mmdb" ) { # Default Maxmind GeoIP dir
+      $defPath = "$ENV{'PROGRAMDATA'}\\Maxmind\\GeoIPUpdate\\GeoIP\\GeoLite2-City.mmdb";
     }
     return($defPath) if $defPath;
   }
@@ -13923,10 +13906,8 @@ sub configTab_Click
     $winConfig->btnMACOUIDBUpt->Hide();
     $winConfig->lblGeoIPDBShadowT->Hide();
     $winConfig->lblGeoIPDBT->Hide();
-    $winConfig->chGeoIPDBAutoUpt->Hide();
     $winConfig->tfGeoIPDB->Hide();
     $winConfig->btnGeoIPDB->Hide();
-    $winConfig->btnGeoIPDBUpt->Hide();
     $winConfig->lblGeoIPNotice->Hide();
     $winConfig->lblIINDBShadowT->Hide();
     $winConfig->lblIINDBT->Hide();
@@ -13992,10 +13973,8 @@ sub configTab_Click
     $winConfig->btnMACOUIDBUpt->Show();
     $winConfig->lblGeoIPDBShadowT->Show();
     $winConfig->lblGeoIPDBT->Show();
-    $winConfig->chGeoIPDBAutoUpt->Show();
     $winConfig->tfGeoIPDB->Show();
     $winConfig->btnGeoIPDB->Show();
-    $winConfig->btnGeoIPDBUpt->Show();
     $winConfig->lblGeoIPNotice->Show();
     $winConfig->lblIINDBShadowT->Show();
     $winConfig->lblIINDBT->Show();
@@ -14126,10 +14105,8 @@ sub configTab_Click
     $winConfig->btnMACOUIDBUpt->Hide();
     $winConfig->lblGeoIPDBShadowT->Hide();
     $winConfig->lblGeoIPDBT->Hide();
-    $winConfig->chGeoIPDBAutoUpt->Hide();
     $winConfig->tfGeoIPDB->Hide();
     $winConfig->btnGeoIPDB->Hide();
-    $winConfig->btnGeoIPDBUpt->Hide();
     $winConfig->lblGeoIPNotice->Hide();
     $winConfig->lblIINDBShadowT->Hide();
     $winConfig->lblIINDBT->Hide();
@@ -14204,10 +14181,8 @@ sub configTab_Click
     $winConfig->btnMACOUIDBUpt->Hide();
     $winConfig->lblGeoIPDBShadowT->Hide();
     $winConfig->lblGeoIPDBT->Hide();
-    $winConfig->chGeoIPDBAutoUpt->Hide();
     $winConfig->tfGeoIPDB->Hide();
     $winConfig->btnGeoIPDB->Hide();
-    $winConfig->btnGeoIPDBUpt->Hide();
     $winConfig->lblGeoIPNotice->Hide();
     $winConfig->lblIINDBShadowT->Hide();
     $winConfig->lblIINDBT->Hide();
@@ -14495,21 +14470,6 @@ sub btnMACOUIDBUpt_Click
 }  #--- End btnMACOUIDBUpt_Click
 
 #--------------------------#
-sub chGeoIPDBAutoUpt_Click
-#--------------------------#
-{
-  # Save the choice
-  if ($winConfig->chGeoIPDBAutoUpt->Checked() == 1) {
-    $CONFIG{'GEOIP_DB_AUTO_UPDATE'} = 1;
-    &saveConfig(\%CONFIG, $CONFIG_FILE);
-  } else {
-    $CONFIG{'GEOIP_DB_AUTO_UPDATE'} = 0;
-    &saveConfig(\%CONFIG, $CONFIG_FILE);
-  }
-
-}  #--- End chGeoIPDBAutoUpt_Click
-
-#--------------------------#
 sub tfGeoIPDB_Change
 #--------------------------#
 {
@@ -14569,44 +14529,6 @@ sub btnGeoIPDB_Click
   return(1);
 
 }  #--- End btnGeoIPDB_Click
-
-#--------------------------#
-sub btnGeoIPDBUpt_Click
-#--------------------------#
-{
-  if ($THR_UPDATE and $THR_UPDATE->is_running()) { Win32::GUI::MessageBox($win, $STR{'processRunning'}, $STR{'Error'}, 0x40010); }
-  else {
-    $THR_UPDATE = threads->create(sub {
-      # Thread 'cancellation' signal handler
-      $SIG{'KILL'} = sub {
-        $win->ChangeCursor($ARROW);
-        # Turn off progress bar
-        $winPb->lblPbCurr->Text('');
-        $winPb->lblCount->Text('');
-        $winPb->pbWinPb->SetPos(0);
-        $winPb->Hide();
-        threads->exit();
-      };
-      # Thread 'die' signal handler
-      $SIG{__DIE__} = sub {
-        my $errMsg = (split(/ at /,$_[0]))[0];
-        chomp($errMsg);
-        $errMsg =~ s/[\t\r\n]/ /g;
-        $win->ChangeCursor($ARROW);
-        # Turn off progress bar
-        $winPb->lblPbCurr->Text('');
-        $winPb->lblCount->Text('');
-        $winPb->pbWinPb->SetPos(0);
-        $winPb->Hide();
-        Win32::GUI::MessageBox($win, "$STR{'errorMsg'}: $errMsg", $STR{'Error'}, 0x40010);
-      };
-      &updateDB(1, 'GeoIP', $STR{'GeoIPDB'}, $winConfig->tfGeoIPDB->Text(), 'Maxmind', 'GeoLite2-City.mmdb', $USERDIR, \$HOURGLASS, \$ARROW,
-                \%CONFIG, $CONFIG_FILE, \$winConfig, \$winDTDB, \$winLFDB, \$winLFObj, \$winPb, \$win, \%STR);
-    });
-  }
-  return(1);
-  
-}  #--- End btnGeoIPDBUpt_Click
 
 #--------------------------#
 sub tfExprHistoDB_Change
@@ -15896,7 +15818,7 @@ sub btnAbout_Click
                         -pos         => [140, 80]               ,
                         -font        => $font10                 ,
                         -background  => [255, 255, 255]         ,
-                        -text        => '© Copyright 2016-2019 Alain Rioux', );
+                        -text        => '© Copyright 2016-2020 Alain Rioux', );
   $winAbout->Center($win);
   $winAbout->DoModal();
   return(1);
